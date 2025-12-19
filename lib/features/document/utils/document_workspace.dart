@@ -59,7 +59,7 @@ class DocumentWorkspace {
     final dir = versionsDir(workspaceDir);
     if (!dir.existsSync()) return const [];
 
-    final regex = RegExp(r'^v(\\d+)\\.pdf$', caseSensitive: false);
+    final regex = RegExp(r'^v(\d+)\.pdf$', caseSensitive: false);
     final versions = <WorkspaceVersion>[];
 
     for (final entity in dir.listSync()) {

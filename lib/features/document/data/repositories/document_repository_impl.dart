@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../domain/entities/document_signing_chain.dart';
 import '../../domain/entities/document_signing_result.dart';
 import '../../domain/repositories/document_repository.dart';
 import '../../utils/document_workspace.dart';
@@ -19,6 +21,8 @@ class DocumentRepositoryImpl implements DocumentRepository {
 
   @override
   Future<File?> pickDocument({
+    required String tenantId,
+    required String userId,
     FileType type = FileType.any,
     List<String>? allowedExtensions,
     bool allowMultiple = false,
@@ -32,6 +36,8 @@ class DocumentRepositoryImpl implements DocumentRepository {
 
     final imported = await documentLocalDataSource.importPdfToAppStorage(
       sourcePdf: picked,
+      tenantId: tenantId,
+      userId: userId,
     );
     if (imported == null) return null;
 
@@ -39,13 +45,27 @@ class DocumentRepositoryImpl implements DocumentRepository {
   }
 
   @override
-  Future<List<String>> loadRecentDocuments() {
-    return recentFileLocalDataSource.loadRecentDocuments();
+  Future<List<String>> loadRecentDocuments({
+    required String tenantId,
+    required String userId,
+  }) {
+    return recentFileLocalDataSource.loadRecentDocuments(
+      tenantId: tenantId,
+      userId: userId,
+    );
   }
 
   @override
-  Future<void> saveRecentDocuments(List<String> documentPaths) {
-    return recentFileLocalDataSource.saveRecentDocuments(documentPaths);
+  Future<void> saveRecentDocuments({
+    required String tenantId,
+    required String userId,
+    required List<String> documentPaths,
+  }) {
+    return recentFileLocalDataSource.saveRecentDocuments(
+      tenantId: tenantId,
+      userId: userId,
+      documentPaths: documentPaths,
+    );
   }
 
   @override
@@ -65,6 +85,7 @@ class DocumentRepositoryImpl implements DocumentRepository {
 
   @override
   Future<DocumentSigningResult?> requestDocumentSigning({
+    required String tenantId,
     required File originalPdf,
     required String userId,
     required bool consent,
@@ -72,23 +93,43 @@ class DocumentRepositoryImpl implements DocumentRepository {
     if (!consent) return null;
 
     final workspaceDir = DocumentWorkspace.findWorkspaceDir(originalPdf.path);
-    final docDirName =
-        workspaceDir == null ? '' : DocumentWorkspace.basename(workspaceDir.path);
-    final docId = docDirName.startsWith('doc_')
-        ? docDirName.substring('doc_'.length)
-        : docDirName;
-
     final existingVersions =
         workspaceDir == null ? const <WorkspaceVersion>[] : DocumentWorkspace.listVersionsSync(workspaceDir);
     final nextVersion =
         existingVersions.isEmpty ? 1 : existingVersions.first.number + 1;
+
+    final basePdf = existingVersions.isEmpty ? originalPdf : existingVersions.first.file;
+
+    final existingChain =
+        await documentLocalDataSource.readSigningChainFromPdf(pdfFile: basePdf);
+    final chain = existingChain ?? DocumentSigningChain(
+      schemaVersion: 1,
+      chainId: '',
+      signers: const <DocumentSigner>[],
+    );
+
+    final chainId = chain.chainId.trim().isEmpty ? const Uuid().v4() : chain.chainId;
+    final signerIndex = chain.signers.length + 1;
     final verificationUrl =
-        (docId.isEmpty) ? null : 'https://example.com/verify/$docId/v$nextVersion';
+        'https://example.com/verify/$tenantId/$chainId/sig/$signerIndex/v$nextVersion';
+
+    final signer = DocumentSigner(
+      index: signerIndex,
+      tenantId: tenantId,
+      userId: userId,
+      signedAtIso: DateTime.now().toIso8601String(),
+      verificationUrl: verificationUrl,
+    );
+    final updatedChain = DocumentSigningChain(
+      schemaVersion: chain.schemaVersion,
+      chainId: chainId,
+      signers: [...chain.signers, signer],
+    );
 
     final signedBytes = await documentLocalDataSource.mockBackendSignPdf(
-      originalPdf: originalPdf,
-      userId: userId,
-      barcodeData: verificationUrl ?? 'doc:$docId|v:$nextVersion',
+      inputPdf: basePdf,
+      signingChain: updatedChain,
+      barcodeData: verificationUrl,
     );
 
     final saved = await documentLocalDataSource.saveSignedPdfAsNewVersion(
@@ -103,5 +144,10 @@ class DocumentRepositoryImpl implements DocumentRepository {
       versionNumber: saved.versionNumber,
       verificationUrl: verificationUrl,
     );
+  }
+
+  @override
+  Future<DocumentSigningChain?> readSigningChainFromPdf({required File pdfFile}) {
+    return documentLocalDataSource.readSigningChainFromPdf(pdfFile: pdfFile);
   }
 }

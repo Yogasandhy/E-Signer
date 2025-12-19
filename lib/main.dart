@@ -27,19 +27,18 @@ Future<void> main() async {
 
   final documentUseCases = DocumentUseCases.fromRepository(documentRepository);
   final prefs = await SharedPreferences.getInstance();
+  final initialTenantId = prefs.getString(keyTenantId);
   final initialUserId = prefs.getString(keyUserId);
 
   runApp(
     RepositoryProvider.value(
       value: documentUseCases,
-      child: BlocProvider(
-        create: (_) => RecentDocumentsBloc(
-          documentUseCases: documentUseCases,
-        )..add(const RecentDocumentsLoaded()),
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.themeData,
-          home: _AppRoot(initialUserId: initialUserId),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.themeData,
+        home: _AppRoot(
+          initialTenantId: initialTenantId,
+          initialUserId: initialUserId,
         ),
       ),
     ),
@@ -48,9 +47,11 @@ Future<void> main() async {
 
 class _AppRoot extends StatefulWidget {
   const _AppRoot({
+    required this.initialTenantId,
     required this.initialUserId,
   });
 
+  final String? initialTenantId;
   final String? initialUserId;
 
   @override
@@ -58,11 +59,15 @@ class _AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<_AppRoot> {
+  late String? _tenantId;
   late String? _userId;
 
   @override
   void initState() {
     super.initState();
+    _tenantId = widget.initialTenantId?.trim().isEmpty ?? true
+        ? null
+        : widget.initialTenantId!.trim();
     _userId = widget.initialUserId?.trim().isEmpty ?? true
         ? null
         : widget.initialUserId!.trim();
@@ -70,23 +75,42 @@ class _AppRootState extends State<_AppRoot> {
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(keyTenantId);
     await prefs.remove(keyUserId);
     if (!mounted) return;
-    setState(() => _userId = null);
+    setState(() {
+      _tenantId = null;
+      _userId = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final tenantId = _tenantId;
     final userId = _userId;
-    if (userId == null) {
+    if (tenantId == null || userId == null) {
       return LoginScreen(
-        onLoggedIn: (id) => setState(() => _userId = id.trim()),
+        onLoggedIn: (session) {
+          setState(() {
+            _tenantId = session.tenantId.trim();
+            _userId = session.userId.trim();
+          });
+        },
       );
     }
 
-    return HomeScreen(
-      userId: userId,
-      onLogout: _logout,
+    final documentUseCases = context.read<DocumentUseCases>();
+    return BlocProvider(
+      create: (_) => RecentDocumentsBloc(
+        documentUseCases: documentUseCases,
+        tenantId: tenantId,
+        userId: userId,
+      )..add(const RecentDocumentsLoaded()),
+      child: HomeScreen(
+        tenantId: tenantId,
+        userId: userId,
+        onLogout: _logout,
+      ),
     );
   }
 }

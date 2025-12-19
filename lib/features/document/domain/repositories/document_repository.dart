@@ -3,17 +3,27 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 
 import '../entities/document_signing_result.dart';
+import '../entities/document_signing_chain.dart';
 
 abstract class DocumentRepository {
   Future<File?> pickDocument({
+    required String tenantId,
+    required String userId,
     FileType type = FileType.any,
     List<String>? allowedExtensions,
     bool allowMultiple = false,
   });
 
-  Future<List<String>> loadRecentDocuments();
+  Future<List<String>> loadRecentDocuments({
+    required String tenantId,
+    required String userId,
+  });
 
-  Future<void> saveRecentDocuments(List<String> documentPaths);
+  Future<void> saveRecentDocuments({
+    required String tenantId,
+    required String userId,
+    required List<String> documentPaths,
+  });
 
   Future<String?> savePdfToExternalStorage({
     required File pdfFile,
@@ -21,8 +31,11 @@ abstract class DocumentRepository {
   });
 
   Future<DocumentSigningResult?> requestDocumentSigning({
+    required String tenantId,
     required File originalPdf,
     required String userId,
     required bool consent,
   });
+
+  Future<DocumentSigningChain?> readSigningChainFromPdf({required File pdfFile});
 }

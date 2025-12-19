@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
+import '../../domain/entities/document_signing_chain.dart';
 import '../../domain/usecases/document_usecases.dart';
 import '../../../../presentation/app_theme.dart';
 import '../../../../presentation/components/dialog.dart';
@@ -99,11 +100,29 @@ Future<void> showDocumentIntegrityResultDialog({
               label: 'Dokumen',
               value: _docLabel(result.match!),
             ),
+            if ((result.match!.tenantId ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _KeyValue(label: 'Tenant', value: result.match!.tenantId!.trim()),
+            ],
+            if ((result.match!.userId ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _KeyValue(label: 'User', value: result.match!.userId!.trim()),
+            ],
             const SizedBox(height: 10),
             _KeyValue(
               label: 'Versi',
               value: 'v${result.match!.versionNumber}',
             ),
+          ],
+          if (result.signingChain != null &&
+              result.signingChain!.signers.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _KeyValue(
+              label: 'Chain',
+              value: result.signingChain!.chainId,
+            ),
+            const SizedBox(height: 10),
+            _SignerHistoryBox(signers: result.signingChain!.signers),
           ],
           if (result.sha256Hex.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -266,3 +285,87 @@ class _HashBox extends StatelessWidget {
   }
 }
 
+class _SignerHistoryBox extends StatelessWidget {
+  const _SignerHistoryBox({required this.signers});
+
+  final List<DocumentSigner> signers;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.secoundColor.withAlpha(12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.secoundColor.withAlpha(40)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Riwayat Tanda Tangan',
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppTheme.secoundColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...signers.map((s) {
+            final index = s.index.toString();
+            final tenantId = s.tenantId;
+            final userId = s.userId;
+            final signedAtIso = s.signedAtIso;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppTheme.secoundColor.withAlpha(22),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      index,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppTheme.secoundColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$tenantId • $userId',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (signedAtIso.trim().isNotEmpty)
+                          Text(
+                            signedAtIso.replaceFirst('T', ' '),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.grey[700],
+                              height: 1.2,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}

@@ -18,10 +18,12 @@ import '../../../../presentation/app_theme.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
+    required this.tenantId,
     required this.userId,
     required this.onLogout,
   });
 
+  final String tenantId;
   final String userId;
   final Future<void> Function() onLogout;
 
@@ -34,12 +36,13 @@ class HomeScreen extends StatelessWidget {
           children: [
             Expanded(
               child: DocumentUploadInformationWidget(
+                tenantId: tenantId,
                 userId: userId,
                 onLogout: onLogout,
               ),
             ),
             Expanded(
-              child: SelectedDocumentsWidget(userId: userId),
+              child: SelectedDocumentsWidget(tenantId: tenantId, userId: userId),
             ),
           ],
         ),
@@ -51,10 +54,12 @@ class HomeScreen extends StatelessWidget {
 class DocumentUploadInformationWidget extends StatelessWidget {
   const DocumentUploadInformationWidget({
     super.key,
+    required this.tenantId,
     required this.userId,
     required this.onLogout,
   });
 
+  final String tenantId;
   final String userId;
   final Future<void> Function() onLogout;
 
@@ -159,21 +164,28 @@ class DocumentUploadInformationWidget extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.55,
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(28),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    userId,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(28),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$tenantId • $userId',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -214,17 +226,35 @@ class DocumentUploadInformationWidget extends StatelessWidget {
   }
 }
 
-class SelectedDocumentsWidget extends StatelessWidget {
+class SelectedDocumentsWidget extends StatefulWidget {
   const SelectedDocumentsWidget({
     super.key,
+    required this.tenantId,
     required this.userId,
   });
 
+  final String tenantId;
   final String userId;
 
+  @override
+  State<SelectedDocumentsWidget> createState() => _SelectedDocumentsWidgetState();
+}
+
+class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
   Future<String> _readDocumentDisplayName(String documentPath) async {
     final name = await DocumentWorkspace.readOriginalName(documentPath);
     return name ?? DocumentWorkspace.basename(documentPath);
+  }
+
+  File _resolveLatestWorkspacePdf(String documentPath) {
+    final workspaceDir = DocumentWorkspace.findWorkspaceDir(documentPath);
+    if (workspaceDir == null) return File(documentPath);
+
+    final latest = DocumentWorkspace.latestVersionSync(workspaceDir);
+    if (latest != null && latest.existsSync()) return latest;
+
+    final original = File('${workspaceDir.path}/original.pdf');
+    return original.existsSync() ? original : File(documentPath);
   }
 
   @override
@@ -255,6 +285,8 @@ class SelectedDocumentsWidget extends StatelessWidget {
               child: GestureDetector(
                 onTap: () async {
                   resultFilePicker = await documentUseCases.pickDocument(
+                    tenantId: widget.tenantId,
+                    userId: widget.userId,
                     type: FileType.custom,
                     allowedExtensions: ['pdf'],
                   );
@@ -265,16 +297,20 @@ class SelectedDocumentsWidget extends StatelessWidget {
                     context
                         .read<RecentDocumentsBloc>()
                         .add(RecentDocumentAdded(resultFilePicker!.path));
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => PdfViewerScreen(
                           pdfFile: resultFilePicker!,
                           mode: PdfViewerMode.preview,
-                          userId: userId,
+                          tenantId: widget.tenantId,
+                          userId: widget.userId,
                         ),
                       ),
                     );
+
+                    if (!mounted) return;
+                    setState(() {});
                   }
                 },
                 child: Container(
@@ -374,20 +410,26 @@ class SelectedDocumentsWidget extends StatelessWidget {
                       children: [
                         GestureDetector(
                           key: ValueKey(state.documentPath[index]),
-                          onTap: () {
+                          onTap: () async {
+                            final displayFile = _resolveLatestWorkspacePdf(
+                              state.documentPath[index],
+                            );
                             context
                                 .read<RecentDocumentsBloc>()
                                 .add(RecentDocumentSelected(state.documentPath[index]));
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => PdfViewerScreen(
-                                  pdfFile: File(state.documentPath[index]),
+                                  pdfFile: displayFile,
                                   mode: PdfViewerMode.preview,
-                                  userId: userId,
+                                  tenantId: widget.tenantId,
+                                  userId: widget.userId,
                                 ),
                               ),
                             );
+                            if (!mounted) return;
+                            setState(() {});
                           },
                           child: Container(
                             height: MediaQuery.of(context).size.height * 0.17,
@@ -396,13 +438,10 @@ class SelectedDocumentsWidget extends StatelessWidget {
                             decoration: BoxDecoration(
                               border: Border.all(color: Colors.black),
                             ),
-                            child: Thumbnail(
-                              dataResolver: () async =>
-                                  await File(state.documentPath[index])
-                                      .readAsBytes(),
-                              mimeType: 'application/pdf',
-                              widgetSize:
-                                  MediaQuery.of(context).size.height * 0.19,
+                            child: _RecentPdfThumbnail(
+                              pdfFile: _resolveLatestWorkspacePdf(
+                                state.documentPath[index],
+                              ),
                             ),
                           ),
                         ),
@@ -432,6 +471,22 @@ class SelectedDocumentsWidget extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _RecentPdfThumbnail extends StatelessWidget {
+  const _RecentPdfThumbnail({required this.pdfFile});
+
+  final File pdfFile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Thumbnail(
+      key: ValueKey(pdfFile.path),
+      dataResolver: () async => pdfFile.readAsBytes(),
+      mimeType: 'application/pdf',
+      widgetSize: MediaQuery.of(context).size.height * 0.19,
     );
   }
 }

@@ -7,7 +7,11 @@ import 'recent_documents_state.dart';
 class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsState> {
   RecentDocumentsBloc({
     required DocumentUseCases documentUseCases,
+    required String tenantId,
+    required String userId,
   })  : _documentUseCases = documentUseCases,
+        _tenantId = tenantId,
+        _userId = userId,
         super(const RecentDocumentsState(documentPath: [])) {
     on<RecentDocumentsLoaded>(_onLoaded);
     on<RecentDocumentAdded>(_onAdded);
@@ -16,12 +20,17 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
   }
 
   final DocumentUseCases _documentUseCases;
+  final String _tenantId;
+  final String _userId;
 
   Future<void> _onLoaded(
     RecentDocumentsLoaded event,
     Emitter<RecentDocumentsState> emit,
   ) async {
-    final paths = await _documentUseCases.loadRecentDocuments();
+    final paths = await _documentUseCases.loadRecentDocuments(
+      tenantId: _tenantId,
+      userId: _userId,
+    );
     emit(state.copyWith(documentPath: paths));
   }
 
@@ -40,7 +49,11 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
 
     final trimmed = _trimList(updated);
     emit(state.copyWith(documentPath: trimmed));
-    await _documentUseCases.saveRecentDocuments(trimmed);
+    await _documentUseCases.saveRecentDocuments(
+      tenantId: _tenantId,
+      userId: _userId,
+      documentPaths: trimmed,
+    );
   }
 
   Future<void> _onDeleted(
@@ -51,7 +64,11 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
       ..removeWhere((d) => d == event.documentPath);
 
     emit(RecentDocumentsState(documentPath: updated));
-    await _documentUseCases.saveRecentDocuments(updated);
+    await _documentUseCases.saveRecentDocuments(
+      tenantId: _tenantId,
+      userId: _userId,
+      documentPaths: updated,
+    );
   }
 
   Future<void> _onSelected(
@@ -69,7 +86,11 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
 
     final trimmed = _trimList(updated);
     emit(state.copyWith(documentPath: trimmed));
-    await _documentUseCases.saveRecentDocuments(trimmed);
+    await _documentUseCases.saveRecentDocuments(
+      tenantId: _tenantId,
+      userId: _userId,
+      documentPaths: trimmed,
+    );
   }
 
   List<String> _trimList(List<String> list) {

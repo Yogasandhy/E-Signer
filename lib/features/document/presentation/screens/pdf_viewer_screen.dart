@@ -23,12 +23,14 @@ class PdfViewerScreen extends StatefulWidget {
     required this.pdfFile,
     required this.mode,
     this.verificationUrl,
+    this.tenantId,
     this.userId,
   });
 
   final File pdfFile;
   final PdfViewerMode mode;
   final String? verificationUrl;
+  final String? tenantId;
   final String? userId;
 
   @override
@@ -214,7 +216,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       label: const Text('Lanjut ke Consent'),
                       onPressed: () async {
                         final userId = widget.userId?.trim();
-                        if (userId == null || userId.isEmpty) {
+                        final tenantId = widget.tenantId?.trim();
+                        if (tenantId == null ||
+                            tenantId.isEmpty ||
+                            userId == null ||
+                            userId.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('User belum login.'),
@@ -229,6 +235,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                           MaterialPageRoute(
                             builder: (_) => ConsentScreen(
                               originalPdf: widget.pdfFile,
+                              tenantId: tenantId,
                               userId: userId,
                             ),
                           ),

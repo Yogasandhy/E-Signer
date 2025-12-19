@@ -12,10 +12,12 @@ class ConsentScreen extends StatefulWidget {
   const ConsentScreen({
     super.key,
     required this.originalPdf,
+    required this.tenantId,
     required this.userId,
   });
 
   final File originalPdf;
+  final String tenantId;
   final String userId;
 
   @override
@@ -34,6 +36,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
 
     final result = await documentUseCases.requestDocumentSigning(
       originalPdf: widget.originalPdf,
+      tenantId: widget.tenantId,
       userId: widget.userId,
       consent: true,
     );
