@@ -1,22 +1,23 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:uuid/uuid.dart';
 
-import '../../domain/entities/document_signing_chain.dart';
 import '../../domain/entities/document_signing_result.dart';
 import '../../domain/repositories/document_repository.dart';
 import '../../utils/document_workspace.dart';
 import '../datasources/document_local_data_source.dart';
 import '../datasources/recent_file_local_data_source.dart';
+import '../../../../core/network/document_api.dart';
 
 class DocumentRepositoryImpl implements DocumentRepository {
   final DocumentLocalDataSource documentLocalDataSource;
   final RecentFileLocalDataSource recentFileLocalDataSource;
+  final DocumentApi documentApi;
 
   DocumentRepositoryImpl({
     required this.documentLocalDataSource,
     required this.recentFileLocalDataSource,
+    required this.documentApi,
   });
 
   @override
@@ -86,6 +87,7 @@ class DocumentRepositoryImpl implements DocumentRepository {
   @override
   Future<DocumentSigningResult?> requestDocumentSigning({
     required String tenantId,
+    required String accessToken,
     required File originalPdf,
     required String userId,
     required bool consent,
@@ -95,59 +97,33 @@ class DocumentRepositoryImpl implements DocumentRepository {
     final workspaceDir = DocumentWorkspace.findWorkspaceDir(originalPdf.path);
     final existingVersions =
         workspaceDir == null ? const <WorkspaceVersion>[] : DocumentWorkspace.listVersionsSync(workspaceDir);
-    final nextVersion =
-        existingVersions.isEmpty ? 1 : existingVersions.first.number + 1;
-
     final basePdf = existingVersions.isEmpty ? originalPdf : existingVersions.first.file;
 
-    final existingChain =
-        await documentLocalDataSource.readSigningChainFromPdf(pdfFile: basePdf);
-    final chain = existingChain ?? DocumentSigningChain(
-      schemaVersion: 1,
-      chainId: '',
-      signers: const <DocumentSigner>[],
+    final sign = await documentApi.signDocument(
+      tenant: tenantId,
+      accessToken: accessToken,
+      pdfFile: basePdf,
+      consent: consent,
     );
 
-    final chainId = chain.chainId.trim().isEmpty ? const Uuid().v4() : chain.chainId;
-    final signerIndex = chain.signers.length + 1;
-    final verificationUrl =
-        'https://example.com/verify/$tenantId/$chainId/sig/$signerIndex/v$nextVersion';
-
-    final signer = DocumentSigner(
-      index: signerIndex,
-      tenantId: tenantId,
-      userId: userId,
-      signedAtIso: DateTime.now().toIso8601String(),
-      verificationUrl: verificationUrl,
-    );
-    final updatedChain = DocumentSigningChain(
-      schemaVersion: chain.schemaVersion,
-      chainId: chainId,
-      signers: [...chain.signers, signer],
-    );
-
-    final signedBytes = await documentLocalDataSource.mockBackendSignPdf(
-      inputPdf: basePdf,
-      signingChain: updatedChain,
-      barcodeData: verificationUrl,
-    );
+    final signedBytes =
+        await documentApi.downloadPdfBytes(url: sign.signedPdfDownloadUrl);
 
     final saved = await documentLocalDataSource.saveSignedPdfAsNewVersion(
       originalPdf: originalPdf,
       signedPdfBytes: signedBytes,
-      versionNumber: nextVersion,
+      versionNumber: sign.versionNumber,
+      backendDocumentId: sign.documentId,
+      backendChainId: sign.chainId,
+      backendVerificationUrl: sign.verificationUrl,
+      backendSignedPdfSha256: sign.signedPdfSha256,
     );
     if (saved == null) return null;
 
     return DocumentSigningResult(
       signedPdf: saved.file,
       versionNumber: saved.versionNumber,
-      verificationUrl: verificationUrl,
+      verificationUrl: sign.verificationUrl,
     );
-  }
-
-  @override
-  Future<DocumentSigningChain?> readSigningChainFromPdf({required File pdfFile}) {
-    return documentLocalDataSource.readSigningChainFromPdf(pdfFile: pdfFile);
   }
 }

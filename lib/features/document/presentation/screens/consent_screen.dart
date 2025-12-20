@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../domain/entities/document_signing_result.dart';
 import '../../domain/usecases/document_usecases.dart';
 import '../../utils/document_workspace.dart';
 import '../../../../presentation/app_theme.dart';
@@ -14,11 +15,13 @@ class ConsentScreen extends StatefulWidget {
     required this.originalPdf,
     required this.tenantId,
     required this.userId,
+    required this.accessToken,
   });
 
   final File originalPdf;
   final String tenantId;
   final String userId;
+  final String accessToken;
 
   @override
   State<ConsentScreen> createState() => _ConsentScreenState();
@@ -34,12 +37,26 @@ class _ConsentScreenState extends State<ConsentScreen> {
     setState(() => _isSubmitting = true);
     final documentUseCases = context.read<DocumentUseCases>();
 
-    final result = await documentUseCases.requestDocumentSigning(
-      originalPdf: widget.originalPdf,
-      tenantId: widget.tenantId,
-      userId: widget.userId,
-      consent: true,
-    );
+    DocumentSigningResult? result;
+    try {
+      result = await documentUseCases.requestDocumentSigning(
+        originalPdf: widget.originalPdf,
+        tenantId: widget.tenantId,
+        accessToken: widget.accessToken,
+        userId: widget.userId,
+        consent: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -54,12 +71,13 @@ class _ConsentScreenState extends State<ConsentScreen> {
       return;
     }
 
+    final signed = result;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PdfViewerScreen(
-          pdfFile: result.signedPdf,
+          pdfFile: signed.signedPdf,
           mode: PdfViewerMode.signedResult,
-          verificationUrl: result.verificationUrl,
+          verificationUrl: signed.verificationUrl,
         ),
       ),
     );

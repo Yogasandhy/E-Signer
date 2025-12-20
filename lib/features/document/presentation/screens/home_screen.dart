@@ -6,13 +6,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:thumbnailer/thumbnailer.dart';
 
+import '../../../../core/network/verify_api.dart';
 import '../../domain/usecases/document_usecases.dart';
 import '../../utils/document_workspace.dart';
 import '../bloc/recent_documents/recent_documents_bloc.dart';
 import '../bloc/recent_documents/recent_documents_event.dart';
 import '../bloc/recent_documents/recent_documents_state.dart';
 import 'pdf_viewer_screen.dart';
-import '../widgets/document_integrity_result_dialog.dart';
+import '../widgets/document_verify_result_dialog.dart';
 import '../../../../presentation/app_theme.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -20,11 +21,15 @@ class HomeScreen extends StatelessWidget {
     super.key,
     required this.tenantId,
     required this.userId,
+    required this.accessToken,
+    this.userEmail,
     required this.onLogout,
   });
 
   final String tenantId;
   final String userId;
+  final String accessToken;
+  final String? userEmail;
   final Future<void> Function() onLogout;
 
   @override
@@ -38,11 +43,16 @@ class HomeScreen extends StatelessWidget {
               child: DocumentUploadInformationWidget(
                 tenantId: tenantId,
                 userId: userId,
+                userEmail: userEmail,
                 onLogout: onLogout,
               ),
             ),
             Expanded(
-              child: SelectedDocumentsWidget(tenantId: tenantId, userId: userId),
+              child: SelectedDocumentsWidget(
+                tenantId: tenantId,
+                userId: userId,
+                accessToken: accessToken,
+              ),
             ),
           ],
         ),
@@ -56,11 +66,13 @@ class DocumentUploadInformationWidget extends StatelessWidget {
     super.key,
     required this.tenantId,
     required this.userId,
+    this.userEmail,
     required this.onLogout,
   });
 
   final String tenantId;
   final String userId;
+  final String? userEmail;
   final Future<void> Function() onLogout;
 
   @override
@@ -127,8 +139,9 @@ class DocumentUploadInformationWidget extends StatelessWidget {
                       ),
                     );
 
-                    final documentUseCases = context.read<DocumentUseCases>();
-                    final check = await documentUseCases.checkDocumentIntegrity(
+                    final verifyApi = context.read<VerifyApi>();
+                    final check = await verifyApi.verifyPdf(
+                      tenant: tenantId,
                       pdfFile: pdfFile,
                     );
 
@@ -137,8 +150,9 @@ class DocumentUploadInformationWidget extends StatelessWidget {
                     }
                     if (!context.mounted) return;
 
-                    await showDocumentIntegrityResultDialog(
+                    await showDocumentVerifyResultDialog(
                       context: context,
+                      tenantId: tenantId,
                       fileName: DocumentWorkspace.basename(pdfFile.path),
                       result: check,
                     );
@@ -178,7 +192,7 @@ class DocumentUploadInformationWidget extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      '$tenantId • $userId',
+                      '$tenantId • ${(userEmail ?? userId).trim()}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -231,35 +245,20 @@ class SelectedDocumentsWidget extends StatefulWidget {
     super.key,
     required this.tenantId,
     required this.userId,
+    required this.accessToken,
   });
 
   final String tenantId;
   final String userId;
+  final String accessToken;
 
   @override
   State<SelectedDocumentsWidget> createState() => _SelectedDocumentsWidgetState();
 }
 
 class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
-  Future<String> _readDocumentDisplayName(String documentPath) async {
-    final name = await DocumentWorkspace.readOriginalName(documentPath);
-    return name ?? DocumentWorkspace.basename(documentPath);
-  }
-
-  File _resolveLatestWorkspacePdf(String documentPath) {
-    final workspaceDir = DocumentWorkspace.findWorkspaceDir(documentPath);
-    if (workspaceDir == null) return File(documentPath);
-
-    final latest = DocumentWorkspace.latestVersionSync(workspaceDir);
-    if (latest != null && latest.existsSync()) return latest;
-
-    final original = File('${workspaceDir.path}/original.pdf');
-    return original.existsSync() ? original : File(documentPath);
-  }
-
   @override
   Widget build(BuildContext context) {
-    File? resultFilePicker;
     final documentUseCases = context.read<DocumentUseCases>();
 
     final double screenWidth =
@@ -284,7 +283,7 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
             Center(
               child: GestureDetector(
                 onTap: () async {
-                  resultFilePicker = await documentUseCases.pickDocument(
+                  final picked = await documentUseCases.pickDocument(
                     tenantId: widget.tenantId,
                     userId: widget.userId,
                     type: FileType.custom,
@@ -293,18 +292,19 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
 
                   if (!context.mounted) return;
 
-                  if (resultFilePicker != null) {
+                  if (picked != null) {
                     context
                         .read<RecentDocumentsBloc>()
-                        .add(RecentDocumentAdded(resultFilePicker!.path));
+                        .add(RecentDocumentAdded(picked.path));
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => PdfViewerScreen(
-                          pdfFile: resultFilePicker!,
+                          pdfFile: picked,
                           mode: PdfViewerMode.preview,
                           tenantId: widget.tenantId,
                           userId: widget.userId,
+                          accessToken: widget.accessToken,
                         ),
                       ),
                     );
@@ -411,7 +411,7 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
                         GestureDetector(
                           key: ValueKey(state.documentPath[index]),
                           onTap: () async {
-                            final displayFile = _resolveLatestWorkspacePdf(
+                            final displayFile = DocumentWorkspace.resolveLatestPdfSync(
                               state.documentPath[index],
                             );
                             context
@@ -425,6 +425,7 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
                                   mode: PdfViewerMode.preview,
                                   tenantId: widget.tenantId,
                                   userId: widget.userId,
+                                  accessToken: widget.accessToken,
                                 ),
                               ),
                             );
@@ -439,7 +440,7 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
                               border: Border.all(color: Colors.black),
                             ),
                             child: _RecentPdfThumbnail(
-                              pdfFile: _resolveLatestWorkspacePdf(
+                              pdfFile: DocumentWorkspace.resolveLatestPdfSync(
                                 state.documentPath[index],
                               ),
                             ),
@@ -450,7 +451,7 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
                           margin: const EdgeInsets.only(top: 10),
                           alignment: Alignment.center,
                           child: FutureBuilder<String>(
-                            future: _readDocumentDisplayName(
+                            future: DocumentWorkspace.resolveDisplayName(
                               state.documentPath[index],
                             ),
                             builder: (context, snapshot) {

@@ -40,9 +40,7 @@ dependencies:
   material_design_icons_flutter: ^7.0.7296
   open_file: ^3.2.1
   path_provider: ^2.0.8
-  qr: ^3.0.2
   shared_preferences: ^2.0.11
-  syncfusion_flutter_pdf: ^31.2.18
   thumbnailer: ^3.2.0
   uuid: ^4.5.2
   pdfrx: ^2.2.17

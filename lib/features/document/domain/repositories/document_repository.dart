@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 
 import '../entities/document_signing_result.dart';
-import '../entities/document_signing_chain.dart';
 
 abstract class DocumentRepository {
   Future<File?> pickDocument({
@@ -32,10 +31,9 @@ abstract class DocumentRepository {
 
   Future<DocumentSigningResult?> requestDocumentSigning({
     required String tenantId,
+    required String accessToken,
     required File originalPdf,
     required String userId,
     required bool consent,
   });
-
-  Future<DocumentSigningChain?> readSigningChainFromPdf({required File pdfFile});
 }

@@ -55,6 +55,11 @@ class DocumentWorkspace {
     }
   }
 
+  static Future<String> resolveDisplayName(String anyPath) async {
+    final name = await readOriginalName(anyPath);
+    return name ?? basename(anyPath);
+  }
+
   static List<WorkspaceVersion> listVersionsSync(Directory workspaceDir) {
     final dir = versionsDir(workspaceDir);
     if (!dir.existsSync()) return const [];
@@ -80,5 +85,18 @@ class DocumentWorkspace {
     final versions = listVersionsSync(workspaceDir);
     if (versions.isEmpty) return null;
     return versions.first.file;
+  }
+
+  static File resolveLatestPdfSync(String anyPath) {
+    final workspaceDir = findWorkspaceDir(anyPath);
+    if (workspaceDir == null) return File(anyPath);
+
+    final latest = latestVersionSync(workspaceDir);
+    if (latest != null && latest.existsSync()) return latest;
+
+    final original = File('${workspaceDir.path}/original.pdf');
+    if (original.existsSync()) return original;
+
+    return File(anyPath);
   }
 }

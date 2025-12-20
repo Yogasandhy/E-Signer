@@ -7,6 +7,7 @@ import 'package:open_file/open_file.dart';
 
 import '../../domain/usecases/document_usecases.dart';
 import '../../utils/document_workspace.dart';
+import '../../utils/pdf_file_name.dart';
 
 Future<void> showVersionHistorySheet({
   required BuildContext context,
@@ -15,7 +16,7 @@ Future<void> showVersionHistorySheet({
   final versions = DocumentWorkspace.listVersionsSync(workspaceDir);
   final originalName =
       await DocumentWorkspace.readOriginalName('${workspaceDir.path}/original.pdf');
-  final baseName = _withoutPdfExtension(
+  final baseName = PdfFileName.withoutPdfExtension(
     (originalName ?? 'document').trim(),
   );
 
@@ -53,7 +54,7 @@ Future<void> showVersionHistorySheet({
                   final suggested = '${baseName}__signed_v${v.number}.pdf';
                   final saved = await documentUseCases.savePdfToExternalStorage(
                     pdfFile: v.file,
-                    fileName: _sanitizePdfFileName(suggested),
+                    fileName: PdfFileName.sanitizePdfFileName(suggested),
                   );
                   if (!ctx.mounted) return;
                   if (saved == null) {
@@ -79,21 +80,4 @@ Future<void> showVersionHistorySheet({
       );
     },
   );
-}
-
-String _withoutPdfExtension(String fileName) {
-  final lower = fileName.toLowerCase();
-  if (lower.endsWith('.pdf')) {
-    return fileName.substring(0, fileName.length - 4);
-  }
-  return fileName;
-}
-
-String _sanitizePdfFileName(String input) {
-  var name = input.trim();
-  name = name.replaceAll(RegExp(r'[\\\\/:*?\"<>|]'), '_');
-  if (!name.toLowerCase().endsWith('.pdf')) {
-    name = '$name.pdf';
-  }
-  return name;
 }

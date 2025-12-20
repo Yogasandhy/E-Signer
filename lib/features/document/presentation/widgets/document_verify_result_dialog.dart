@@ -2,39 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
-import '../../domain/entities/document_signing_chain.dart';
-import '../../domain/usecases/document_usecases.dart';
+import '../../../../core/network/verify_api.dart';
+import '../../domain/entities/document_signer.dart';
 import '../../../../presentation/app_theme.dart';
 import '../../../../presentation/components/dialog.dart';
 
-Future<void> showDocumentIntegrityResultDialog({
+Future<void> showDocumentVerifyResultDialog({
   required BuildContext context,
-  required String fileName,
-  required DocumentIntegrityCheckResult result,
+  String? tenantId,
+  String? fileName,
+  required VerifyResponse result,
 }) async {
   final theme = Theme.of(context);
 
-  final _IntegrityUi ui = switch (result.status) {
-    DocumentIntegrityStatus.verified => _IntegrityUi(
-        title: 'ASLI',
-        subtitle: 'Cocok dengan versi yang pernah dibuat di aplikasi ini.',
-        icon: MdiIcons.shieldCheckOutline,
-        color: Colors.green,
-      ),
-    DocumentIntegrityStatus.unknown => _IntegrityUi(
-        title: 'TIDAK TERVERIFIKASI',
-        subtitle:
-            'Mode offline hanya bisa verifikasi file yang pernah dihasilkan di device ini.',
-        icon: MdiIcons.shieldAlertOutline,
-        color: Colors.orange,
-      ),
-    DocumentIntegrityStatus.error => _IntegrityUi(
-        title: 'GAGAL CHECK',
-        subtitle: 'Terjadi error saat memverifikasi dokumen.',
-        icon: MdiIcons.alertCircleOutline,
-        color: Colors.red,
-      ),
-  };
+  final ui = result.valid
+      ? _VerifyUi(
+          title: 'VALID',
+          subtitle: 'Dokumen valid menurut sistem verifikasi.',
+          icon: MdiIcons.shieldCheckOutline,
+          color: Colors.green,
+        )
+      : _VerifyUi(
+          title: 'TIDAK VALID',
+          subtitle: 'Dokumen tidak valid atau sudah berubah.',
+          icon: MdiIcons.shieldAlertOutline,
+          color: Colors.red,
+        );
+
+  final signers = <DocumentSigner>[];
+  final rawSigners = result.signers;
+  if (rawSigners != null) {
+    for (final entry in rawSigners) {
+      final signer = DocumentSigner.fromJson(entry);
+      if (signer != null) signers.add(signer);
+    }
+  }
 
   await showCustomDialog<void>(
     context: context,
@@ -92,69 +94,58 @@ Future<void> showDocumentIntegrityResultDialog({
           const SizedBox(height: 14),
           Divider(color: theme.dividerColor),
           const SizedBox(height: 10),
-          _KeyValue(label: 'File', value: fileName),
-          if (result.status == DocumentIntegrityStatus.verified &&
-              result.match != null) ...[
+          if ((tenantId ?? '').trim().isNotEmpty) ...[
+            _KeyValue(label: 'Tenant', value: tenantId!.trim()),
             const SizedBox(height: 10),
-            _KeyValue(
-              label: 'Dokumen',
-              value: _docLabel(result.match!),
-            ),
-            if ((result.match!.tenantId ?? '').trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _KeyValue(label: 'Tenant', value: result.match!.tenantId!.trim()),
-            ],
-            if ((result.match!.userId ?? '').trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _KeyValue(label: 'User', value: result.match!.userId!.trim()),
-            ],
-            const SizedBox(height: 10),
-            _KeyValue(
-              label: 'Versi',
-              value: 'v${result.match!.versionNumber}',
-            ),
           ],
-          if (result.signingChain != null &&
-              result.signingChain!.signers.isNotEmpty) ...[
+          if ((fileName ?? '').trim().isNotEmpty) ...[
+            _KeyValue(label: 'File', value: fileName!.trim()),
             const SizedBox(height: 10),
-            _KeyValue(
-              label: 'Chain',
-              value: result.signingChain!.chainId,
-            ),
-            const SizedBox(height: 10),
-            _SignerHistoryBox(signers: result.signingChain!.signers),
           ],
-          if (result.sha256Hex.trim().isNotEmpty) ...[
+          if ((result.documentId ?? '').trim().isNotEmpty) ...[
+            _KeyValue(label: 'Dokumen', value: result.documentId!.trim()),
             const SizedBox(height: 10),
-            _HashBox(
-              sha256Hex: result.sha256Hex,
+          ],
+          if ((result.chainId ?? '').trim().isNotEmpty) ...[
+            _KeyValue(label: 'Chain', value: result.chainId!.trim()),
+            const SizedBox(height: 10),
+          ],
+          if (result.versionNumber != null) ...[
+            _KeyValue(label: 'Versi', value: 'v${result.versionNumber}'),
+            const SizedBox(height: 10),
+          ],
+          if ((result.signedPdfDownloadUrl ?? '').trim().isNotEmpty) ...[
+            _CopyBox(
+              label: 'Download URL',
+              value: result.signedPdfDownloadUrl!.trim(),
               onCopy: () async {
-                await Clipboard.setData(ClipboardData(text: result.sha256Hex));
+                await Clipboard.setData(
+                  ClipboardData(text: result.signedPdfDownloadUrl!.trim()),
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Link copied')),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+          if ((result.signedPdfSha256 ?? '').trim().isNotEmpty) ...[
+            _HashBox(
+              sha256Hex: result.signedPdfSha256!.trim(),
+              onCopy: () async {
+                await Clipboard.setData(
+                  ClipboardData(text: result.signedPdfSha256!.trim()),
+                );
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('SHA-256 copied')),
                 );
               },
             ),
-          ],
-          if (result.status == DocumentIntegrityStatus.error) ...[
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withAlpha(16),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withAlpha(50)),
-              ),
-              child: Text(
-                result.error ?? 'Unknown error',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.red[700],
-                  height: 1.3,
-                ),
-              ),
-            ),
           ],
+          if (signers.isNotEmpty) _SignerHistoryBox(signers: signers),
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerRight,
@@ -173,14 +164,8 @@ Future<void> showDocumentIntegrityResultDialog({
   );
 }
 
-String _docLabel(DocumentIntegrityMatch match) {
-  final name = match.originalName?.trim();
-  if (name == null || name.isEmpty) return 'doc_${match.docId}';
-  return name;
-}
-
-class _IntegrityUi {
-  const _IntegrityUi({
+class _VerifyUi {
+  const _VerifyUi({
     required this.title,
     required this.subtitle,
     required this.icon,
@@ -209,7 +194,7 @@ class _KeyValue extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 72,
+          width: 92,
           child: Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
@@ -226,6 +211,60 @@ class _KeyValue extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CopyBox extends StatelessWidget {
+  const _CopyBox({
+    required this.label,
+    required this.value,
+    required this.onCopy,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.withAlpha(16),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.withAlpha(50)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Copy',
+                onPressed: onCopy,
+                icon: Icon(MdiIcons.contentCopy, size: 18),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SelectableText(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
+          ),
+        ],
+      ),
     );
   }
 }

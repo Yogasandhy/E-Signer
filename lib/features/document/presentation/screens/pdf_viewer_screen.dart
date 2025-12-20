@@ -7,6 +7,7 @@ import 'package:open_file/open_file.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../../domain/usecases/document_usecases.dart';
+import '../../utils/pdf_file_name.dart';
 import '../../utils/document_workspace.dart';
 import 'consent_screen.dart';
 import '../widgets/version_history_sheet.dart';
@@ -25,6 +26,7 @@ class PdfViewerScreen extends StatefulWidget {
     this.verificationUrl,
     this.tenantId,
     this.userId,
+    this.accessToken,
   });
 
   final File pdfFile;
@@ -32,6 +34,7 @@ class PdfViewerScreen extends StatefulWidget {
   final String? verificationUrl;
   final String? tenantId;
   final String? userId;
+  final String? accessToken;
 
   @override
   State<PdfViewerScreen> createState() => _PdfViewerScreenState();
@@ -53,7 +56,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }) async {
     final suggested = await _suggestedSaveFileName(sourcePdf);
 
-    final sanitized = _sanitizePdfFileName(suggested);
+    final sanitized = PdfFileName.sanitizePdfFileName(suggested);
     final saved = await documentUseCases.savePdfToExternalStorage(
       pdfFile: sourcePdf,
       fileName: sanitized,
@@ -88,35 +91,11 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     if (originalName == null || originalName.trim().isEmpty) return fallback;
 
     final versionNumber =
-        _tryParseVersionNumber(DocumentWorkspace.basename(sourcePdf.path));
-    if (versionNumber == null) return _sanitizePdfFileName(originalName);
+        PdfFileName.tryParseVersionNumber(DocumentWorkspace.basename(sourcePdf.path));
+    if (versionNumber == null) return PdfFileName.sanitizePdfFileName(originalName);
 
-    final base = _withoutPdfExtension(originalName.trim());
+    final base = PdfFileName.withoutPdfExtension(originalName.trim());
     return '${base}__signed_v$versionNumber.pdf';
-  }
-
-  int? _tryParseVersionNumber(String fileName) {
-    final match = RegExp(r'^v(\d+)\.pdf$', caseSensitive: false).firstMatch(
-      fileName.trim(),
-    );
-    return match == null ? null : int.tryParse(match.group(1) ?? '');
-  }
-
-  String _withoutPdfExtension(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.pdf')) {
-      return fileName.substring(0, fileName.length - 4);
-    }
-    return fileName;
-  }
-
-  String _sanitizePdfFileName(String input) {
-    var name = input.trim();
-    name = name.replaceAll(RegExp(r'[\\\\/:*?\"<>|]'), '_');
-    if (!name.toLowerCase().endsWith('.pdf')) {
-      name = '$name.pdf';
-    }
-    return name;
   }
 
   @override
@@ -217,10 +196,13 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       onPressed: () async {
                         final userId = widget.userId?.trim();
                         final tenantId = widget.tenantId?.trim();
+                        final accessToken = widget.accessToken?.trim();
                         if (tenantId == null ||
                             tenantId.isEmpty ||
                             userId == null ||
-                            userId.isEmpty) {
+                            userId.isEmpty ||
+                            accessToken == null ||
+                            accessToken.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('User belum login.'),
@@ -237,6 +219,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                               originalPdf: widget.pdfFile,
                               tenantId: tenantId,
                               userId: userId,
+                              accessToken: accessToken,
                             ),
                           ),
                         );
