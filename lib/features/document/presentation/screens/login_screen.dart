@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/constants/storage_keys.dart';
-import '../../../../core/network/auth_api.dart';
+import '../../domain/usecases/auth_usecases.dart';
 import '../../../../presentation/app_theme.dart';
 import 'verify_document_screen.dart';
 import 'login_form.dart';
@@ -57,19 +55,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _hydrate();
-  }
-
-  Future<void> _hydrate() async {
-    final prefs = await SharedPreferences.getInstance();
-    final existingTenantId = prefs.getString(keyTenantId);
-    final existingEmail = prefs.getString(keyUserEmail);
-    if (existingTenantId != null && existingTenantId.trim().isNotEmpty) {
-      _tenantController.text = existingTenantId;
-    }
-    if (existingEmail != null && existingEmail.trim().isNotEmpty) {
-      _emailController.text = existingEmail;
-    }
   }
 
   void _setFormMode(_AuthFormMode mode) {
@@ -96,19 +81,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      final authApi = context.read<AuthApi>();
-      final login = await authApi.login(
+      final authUseCases = context.read<AuthUseCases>();
+      final login = await authUseCases.login(
         tenant: tenantId,
         email: email,
         password: password,
         deviceName: 'android',
       );
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(keyAccessToken, login.accessToken);
-      await prefs.setString(keyTenantId, tenantId);
-      await prefs.setString(keyUserId, login.userId);
-      await prefs.setString(keyUserEmail, email);
 
       if (!mounted) return;
       setState(() => _isSubmitting = false);
@@ -161,8 +140,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      final authApi = context.read<AuthApi>();
-      final register = await authApi.register(
+      final authUseCases = context.read<AuthUseCases>();
+      final register = await authUseCases.registerTenant(
         tenantName: tenantName,
         tenantSlug: tenantSlug.isEmpty ? null : tenantSlug,
         name: name,
@@ -176,12 +155,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (resolvedTenantSlug.trim().isEmpty) {
         throw Exception('Register response missing tenantSlug.');
       }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(keyAccessToken, register.accessToken);
-      await prefs.setString(keyTenantId, resolvedTenantSlug);
-      await prefs.setString(keyUserId, register.userId);
-      await prefs.setString(keyUserEmail, email);
 
       if (!mounted) return;
       setState(() => _isSubmitting = false);
@@ -354,7 +327,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                           errorText: _errorText,
                                         ),
                                   VerifyDocumentScreen(
-                                    tenantController: _tenantController,
                                   ),
                                 ],
                               );

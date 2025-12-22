@@ -6,8 +6,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:thumbnailer/thumbnailer.dart';
 
-import '../../../../core/network/verify_api.dart';
+import '../../domain/entities/document_pick_options.dart';
 import '../../domain/usecases/document_usecases.dart';
+import '../../domain/usecases/verify_usecases.dart';
 import '../../utils/document_workspace.dart';
 import '../bloc/recent_documents/recent_documents_bloc.dart';
 import '../bloc/recent_documents/recent_documents_event.dart';
@@ -139,10 +140,10 @@ class DocumentUploadInformationWidget extends StatelessWidget {
                       ),
                     );
 
-                    final verifyApi = context.read<VerifyApi>();
-                    final check = await verifyApi.verifyPdf(
+                    final verifyUseCases = context.read<VerifyUseCases>();
+                    final check = await verifyUseCases.verifyPdf(
                       tenant: tenantId,
-                      pdfFile: pdfFile,
+                      pdfPath: pdfFile.path,
                     );
 
                     if (context.mounted) {
@@ -285,8 +286,9 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
                   final picked = await documentUseCases.pickDocument(
                     tenantId: widget.tenantId,
                     userId: widget.userId,
-                    type: FileType.custom,
-                    allowedExtensions: ['pdf'],
+                    options: const DocumentPickOptions(
+                      allowedExtensions: ['pdf'],
+                    ),
                   );
 
                   if (!context.mounted) return;
@@ -294,12 +296,12 @@ class _SelectedDocumentsWidgetState extends State<SelectedDocumentsWidget> {
                   if (picked != null) {
                     context
                         .read<RecentDocumentsBloc>()
-                        .add(RecentDocumentAdded(picked.path));
+                        .add(RecentDocumentAdded(picked));
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => PdfViewerScreen(
-                          pdfFile: picked,
+                          pdfFile: File(picked),
                           mode: PdfViewerMode.preview,
                           tenantId: widget.tenantId,
                           userId: widget.userId,

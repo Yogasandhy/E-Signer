@@ -53,7 +53,7 @@ Future<void> showVersionHistorySheet({
                   final documentUseCases = ctx.read<DocumentUseCases>();
                   final suggested = '${baseName}__signed_v${v.number}.pdf';
                   final saved = await documentUseCases.savePdfToExternalStorage(
-                    pdfFile: v.file,
+                    pdfPath: v.file.path,
                     fileName: PdfFileName.sanitizePdfFileName(suggested),
                   );
                   if (!ctx.mounted) return;

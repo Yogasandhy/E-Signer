@@ -47,7 +47,7 @@ class LoginForm extends StatelessWidget {
           cursorColor: Colors.black,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
-            hintText: 'contoh: demo',
+            hintText: 'demo',
             prefixIcon: const Icon(Icons.apartment_rounded),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -67,7 +67,7 @@ class LoginForm extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
-            hintText: 'contoh: test@example.com',
+            hintText: 'email@domain.com',
             prefixIcon: const Icon(Icons.email_rounded),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -87,7 +87,7 @@ class LoginForm extends StatelessWidget {
           obscureText: !passwordVisible,
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(
-            hintText: 'contoh: secret123',
+            hintText: '••••••••',
             prefixIcon: const Icon(Icons.lock_rounded),
             suffixIcon: IconButton(
               tooltip: passwordVisible ? 'Hide password' : 'Show password',
@@ -174,4 +174,3 @@ class LoginForm extends StatelessWidget {
     );
   }
 }
-

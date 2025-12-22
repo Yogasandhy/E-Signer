@@ -58,7 +58,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
     final sanitized = PdfFileName.sanitizePdfFileName(suggested);
     final saved = await documentUseCases.savePdfToExternalStorage(
-      pdfFile: sourcePdf,
+      pdfPath: sourcePdf.path,
       fileName: sanitized,
     );
 

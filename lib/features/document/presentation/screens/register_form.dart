@@ -57,7 +57,7 @@ class RegisterForm extends StatelessWidget {
           cursorColor: Colors.black,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
-            hintText: 'contoh: demo (boleh kosong)',
+            hintText: 'demo (opsional)',
             prefixIcon: const Icon(Icons.apartment_rounded),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -76,7 +76,7 @@ class RegisterForm extends StatelessWidget {
           cursorColor: Colors.black,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
-            hintText: 'contoh: Demo Company',
+            hintText: 'Nama perusahaan',
             prefixIcon: const Icon(Icons.business_rounded),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -115,7 +115,7 @@ class RegisterForm extends StatelessWidget {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
-            hintText: 'contoh: test@example.com',
+            hintText: 'email@domain.com',
             prefixIcon: const Icon(Icons.email_rounded),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -135,7 +135,7 @@ class RegisterForm extends StatelessWidget {
           obscureText: !passwordVisible,
           textInputAction: TextInputAction.next,
           decoration: InputDecoration(
-            hintText: 'contoh: secret123',
+            hintText: 'minimal 8 karakter',
             prefixIcon: const Icon(Icons.lock_rounded),
             suffixIcon: IconButton(
               tooltip: passwordVisible ? 'Hide password' : 'Show password',
@@ -252,4 +252,3 @@ class RegisterForm extends StatelessWidget {
     );
   }
 }
-

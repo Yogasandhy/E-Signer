@@ -1,16 +1,11 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
-
 import '../entities/document_signing_result.dart';
+import '../entities/document_pick_options.dart';
 
 abstract class DocumentRepository {
-  Future<File?> pickDocument({
+  Future<String?> pickDocument({
     required String tenantId,
     required String userId,
-    FileType type = FileType.any,
-    List<String>? allowedExtensions,
-    bool allowMultiple = false,
+    DocumentPickOptions options = const DocumentPickOptions(),
   });
 
   Future<List<String>> loadRecentDocuments({
@@ -25,14 +20,14 @@ abstract class DocumentRepository {
   });
 
   Future<String?> savePdfToExternalStorage({
-    required File pdfFile,
+    required String pdfPath,
     required String fileName,
   });
 
   Future<DocumentSigningResult?> requestDocumentSigning({
     required String tenantId,
     required String accessToken,
-    required File originalPdf,
+    required String originalPdfPath,
     required String userId,
     required bool consent,
     String? idempotencyKey,

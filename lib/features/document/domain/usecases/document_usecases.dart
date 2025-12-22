@@ -1,8 +1,5 @@
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
-
 import '../entities/document_signing_result.dart';
+import '../entities/document_pick_options.dart';
 import '../repositories/document_repository.dart';
 
 class DocumentUseCases {
@@ -14,19 +11,15 @@ class DocumentUseCases {
     return DocumentUseCases(repository);
   }
 
-  Future<File?> pickDocument({
+  Future<String?> pickDocument({
     required String tenantId,
     required String userId,
-    FileType type = FileType.any,
-    List<String>? allowedExtensions,
-    bool allowMultiple = false,
+    DocumentPickOptions options = const DocumentPickOptions(),
   }) {
     return _repository.pickDocument(
       tenantId: tenantId,
       userId: userId,
-      type: type,
-      allowedExtensions: allowedExtensions,
-      allowMultiple: allowMultiple,
+      options: options,
     );
   }
 
@@ -53,11 +46,11 @@ class DocumentUseCases {
   }
 
   Future<String?> savePdfToExternalStorage({
-    required File pdfFile,
+    required String pdfPath,
     required String fileName,
   }) {
     return _repository.savePdfToExternalStorage(
-      pdfFile: pdfFile,
+      pdfPath: pdfPath,
       fileName: fileName,
     );
   }
@@ -65,7 +58,7 @@ class DocumentUseCases {
   Future<DocumentSigningResult?> requestDocumentSigning({
     required String tenantId,
     required String accessToken,
-    required File originalPdf,
+    required String originalPdfPath,
     required String userId,
     required bool consent,
     String? idempotencyKey,
@@ -73,7 +66,7 @@ class DocumentUseCases {
     return _repository.requestDocumentSigning(
       tenantId: tenantId,
       accessToken: accessToken,
-      originalPdf: originalPdf,
+      originalPdfPath: originalPdfPath,
       userId: userId,
       consent: consent,
       idempotencyKey: idempotencyKey,

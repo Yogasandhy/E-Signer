@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
-import '../../../../core/network/tenant_public_api.dart';
-import '../../../../core/network/verify_api.dart';
 import '../../domain/entities/document_signer.dart';
+import '../../domain/entities/verify_result.dart';
+import '../../domain/usecases/tenant_usecases.dart';
 import '../../../../presentation/app_theme.dart';
 import '../../../../presentation/components/dialog.dart';
 
 Future<void> showDocumentVerifyResultDialog({
   required BuildContext context,
   String? fileName,
-  required VerifyResponse result,
+  required VerifyResult result,
 }) async {
   final theme = Theme.of(context);
 
@@ -29,14 +29,7 @@ Future<void> showDocumentVerifyResultDialog({
           color: Colors.red,
         );
 
-  final signers = <DocumentSigner>[];
-  final rawSigners = result.signers;
-  if (rawSigners != null) {
-    for (final entry in rawSigners) {
-      final signer = DocumentSigner.fromJson(entry);
-      if (signer != null) signers.add(signer);
-    }
-  }
+  final signers = result.signers;
 
   final tenantNames = signers.isEmpty
       ? const <String, String>{}
@@ -345,7 +338,7 @@ Future<Map<String, String>> _resolveTenantNames({
   required BuildContext context,
   required List<DocumentSigner> signers,
 }) async {
-  final api = context.read<TenantPublicApi>();
+  final tenantUseCases = context.read<TenantUseCases>();
   final tenantKeys = signers
       .map((s) => s.tenantId.trim())
       .where((t) => t.isNotEmpty)
@@ -355,7 +348,7 @@ Future<Map<String, String>> _resolveTenantNames({
   final entries = await Future.wait(
     tenantKeys.map((t) async {
       try {
-        final info = await api.getInfo(tenant: t).timeout(
+        final info = await tenantUseCases.getPublicInfo(tenant: t).timeout(
               const Duration(seconds: 6),
             );
         return MapEntry(t, info.name.trim());

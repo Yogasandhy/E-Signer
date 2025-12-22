@@ -5,6 +5,8 @@ import 'recent_documents_event.dart';
 import 'recent_documents_state.dart';
 
 class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsState> {
+  static const int _maxRecentDocuments = 3;
+
   RecentDocumentsBloc({
     required DocumentUseCases documentUseCases,
     required String tenantId,
@@ -38,22 +40,7 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
     RecentDocumentAdded event,
     Emitter<RecentDocumentsState> emit,
   ) async {
-    final current = state.documentPath;
-
-    final updated = current.contains(event.documentPath)
-        ? [
-            event.documentPath,
-            ...current.where((d) => d != event.documentPath),
-          ]
-        : [event.documentPath, ...current];
-
-    final trimmed = _trimList(updated);
-    emit(state.copyWith(documentPath: trimmed));
-    await _documentUseCases.saveRecentDocuments(
-      tenantId: _tenantId,
-      userId: _userId,
-      documentPaths: trimmed,
-    );
+    await _upsertRecentDocument(event.documentPath, emit);
   }
 
   Future<void> _onDeleted(
@@ -75,14 +62,20 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
     RecentDocumentSelected event,
     Emitter<RecentDocumentsState> emit,
   ) async {
-    final current = state.documentPath;
+    await _upsertRecentDocument(event.documentPath, emit);
+  }
 
-    final updated = current.contains(event.documentPath)
-        ? [
-            event.documentPath,
-            ...current.where((d) => d != event.documentPath),
-          ]
-        : [event.documentPath, ...current];
+  Future<void> _upsertRecentDocument(
+    String documentPath,
+    Emitter<RecentDocumentsState> emit,
+  ) async {
+    final path = documentPath.trim();
+    if (path.isEmpty) return;
+
+    final current = state.documentPath;
+    final updated = current.contains(path)
+        ? [path, ...current.where((d) => d != path)]
+        : [path, ...current];
 
     final trimmed = _trimList(updated);
     emit(state.copyWith(documentPath: trimmed));
@@ -94,7 +87,7 @@ class RecentDocumentsBloc extends Bloc<RecentDocumentsEvent, RecentDocumentsStat
   }
 
   List<String> _trimList(List<String> list) {
-    if (list.length <= 3) return list;
-    return list.take(3).toList();
+    if (list.length <= _maxRecentDocuments) return list;
+    return list.take(_maxRecentDocuments).toList();
   }
 }

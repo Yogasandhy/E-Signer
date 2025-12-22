@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 
+import '../../domain/entities/document_pick_options.dart';
 import '../../domain/entities/document_signing_result.dart';
 import '../../domain/repositories/document_repository.dart';
 import '../../utils/document_workspace.dart';
@@ -21,17 +22,15 @@ class DocumentRepositoryImpl implements DocumentRepository {
   });
 
   @override
-  Future<File?> pickDocument({
+  Future<String?> pickDocument({
     required String tenantId,
     required String userId,
-    FileType type = FileType.any,
-    List<String>? allowedExtensions,
-    bool allowMultiple = false,
+    DocumentPickOptions options = const DocumentPickOptions(),
   }) async {
     final picked = await documentLocalDataSource.pickDocument(
-      type: type,
-      allowedExtensions: allowedExtensions,
-      allowMultiple: allowMultiple,
+      type: FileType.custom,
+      allowedExtensions: options.allowedExtensions ?? const ['pdf'],
+      allowMultiple: options.allowMultiple,
     );
     if (picked == null) return null;
 
@@ -42,7 +41,7 @@ class DocumentRepositoryImpl implements DocumentRepository {
     );
     if (imported == null) return null;
 
-    return imported;
+    return imported.path;
   }
 
   @override
@@ -71,10 +70,12 @@ class DocumentRepositoryImpl implements DocumentRepository {
 
   @override
   Future<String?> savePdfToExternalStorage({
-    required File pdfFile,
+    required String pdfPath,
     required String fileName,
   }) async {
     try {
+      final pdfFile = File(pdfPath);
+      if (!pdfFile.existsSync()) return null;
       return await documentLocalDataSource.savePdfToUserSelectedLocation(
         fileName: fileName,
         bytes: await pdfFile.readAsBytes(),
@@ -88,12 +89,15 @@ class DocumentRepositoryImpl implements DocumentRepository {
   Future<DocumentSigningResult?> requestDocumentSigning({
     required String tenantId,
     required String accessToken,
-    required File originalPdf,
+    required String originalPdfPath,
     required String userId,
     required bool consent,
     String? idempotencyKey,
   }) async {
     if (!consent) return null;
+
+    final originalPdf = File(originalPdfPath);
+    if (!originalPdf.existsSync()) return null;
 
     final workspaceDir = DocumentWorkspace.findWorkspaceDir(originalPdf.path);
     final existingVersions =
@@ -125,7 +129,7 @@ class DocumentRepositoryImpl implements DocumentRepository {
     if (saved == null) return null;
 
     return DocumentSigningResult(
-      signedPdf: saved.file,
+      signedPdfPath: saved.file.path,
       versionNumber: saved.versionNumber,
       verificationUrl: sign.verificationUrl,
     );

@@ -53,7 +53,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
     DocumentSigningResult? result;
     try {
       result = await documentUseCases.requestDocumentSigning(
-        originalPdf: widget.originalPdf,
+        originalPdfPath: widget.originalPdf.path,
         tenantId: widget.tenantId,
         accessToken: widget.accessToken,
         userId: widget.userId,
@@ -101,7 +101,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PdfViewerScreen(
-          pdfFile: signed.signedPdf,
+          pdfFile: File(signed.signedPdfPath),
           mode: PdfViewerMode.signedResult,
           verificationUrl: signed.verificationUrl,
         ),
