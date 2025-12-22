@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../../../core/errors/api_exception.dart';
 import '../../domain/entities/document_signing_result.dart';
 import '../../domain/usecases/document_usecases.dart';
 import '../../utils/document_workspace.dart';
@@ -30,12 +32,23 @@ class ConsentScreen extends StatefulWidget {
 class _ConsentScreenState extends State<ConsentScreen> {
   bool _consentChecked = false;
   bool _isSubmitting = false;
+  late final String _idempotencyKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _idempotencyKey = const Uuid().v4();
+  }
 
   Future<void> _onSignPressed() async {
     if (_isSubmitting || !_consentChecked) return;
 
     setState(() => _isSubmitting = true);
     final documentUseCases = context.read<DocumentUseCases>();
+
+    debugPrint(
+      'SignDocument: start tenant=${widget.tenantId} userId=${widget.userId} file=${widget.originalPdf.path} idempotencyKey=$_idempotencyKey',
+    );
 
     DocumentSigningResult? result;
     try {
@@ -45,8 +58,21 @@ class _ConsentScreenState extends State<ConsentScreen> {
         accessToken: widget.accessToken,
         userId: widget.userId,
         consent: true,
+        idempotencyKey: _idempotencyKey,
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('SignDocument: failed error=$e');
+      if (e is ApiException) {
+        debugPrint('SignDocument: httpStatus=${e.statusCode}');
+        final details = e.details;
+        if (details != null) {
+          final text = details.toString();
+          const maxLen = 1200;
+          final snippet = text.length <= maxLen ? text : text.substring(0, maxLen);
+          debugPrint('SignDocument: details(${text.length} chars)=$snippet');
+        }
+      }
+      debugPrint('SignDocument: stack=$st');
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(

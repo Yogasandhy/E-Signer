@@ -15,6 +15,7 @@ class DocumentApi {
     required String accessToken,
     required File pdfFile,
     required bool consent,
+    String? idempotencyKey,
   }) async {
     final t = tenant.trim();
     if (t.isEmpty) {
@@ -28,11 +29,25 @@ class DocumentApi {
       throw const ApiException('File not found.');
     }
 
+    final resolvedIdempotencyKey = idempotencyKey?.trim();
+
+    final fields = <String, String>{
+      'consent': consent ? 'true' : 'false',
+    };
+    if (resolvedIdempotencyKey != null && resolvedIdempotencyKey.isNotEmpty) {
+      fields['idempotencyKey'] = resolvedIdempotencyKey;
+    }
+
+    final headers = <String, String>{
+      HttpHeaders.authorizationHeader: 'Bearer $token',
+    };
+    if (resolvedIdempotencyKey != null && resolvedIdempotencyKey.isNotEmpty) {
+      headers['Idempotency-Key'] = resolvedIdempotencyKey;
+    }
+
     final body = await _apiClient.postMultipart(
       uri: _apiClient.tenantUri(tenant: t, path: 'api/documents/sign'),
-      fields: <String, String>{
-        'consent': consent ? 'true' : 'false',
-      },
+      fields: fields,
       files: [
         ApiMultipartFile(
           field: 'file',
@@ -40,21 +55,32 @@ class DocumentApi {
           contentType: 'application/pdf',
         ),
       ],
-      headers: <String, String>{
-        HttpHeaders.authorizationHeader: 'Bearer $token',
-      },
+      headers: headers,
       defaultErrorMessage: 'Sign failed.',
     );
 
-    return DocumentSignResponse.fromJsonString(body);
+    final parsed = DocumentSignResponse.fromJsonString(body);
+    return parsed.copyWith(
+      signedPdfDownloadUrl: _apiClient
+          .resolveUrl(parsed.signedPdfDownloadUrl)
+          .toString(),
+      verificationUrl:
+          _apiClient.resolveUrl(parsed.verificationUrl).toString(),
+    );
   }
 
-  Future<Uint8List> downloadPdfBytes({required String url}) {
+  Future<Uint8List> downloadPdfBytes({
+    required String url,
+    String? accessToken,
+  }) {
     final resolved = _apiClient.resolveUrl(url);
+    final token = accessToken?.trim();
     return _apiClient.getBytes(
       uri: resolved,
       headers: <String, String>{
         HttpHeaders.acceptHeader: 'application/pdf',
+        if (token != null && token.isNotEmpty)
+          HttpHeaders.authorizationHeader: 'Bearer $token',
       },
       defaultErrorMessage: 'Download failed.',
     );
@@ -79,6 +105,26 @@ class DocumentSignResponse {
   final String verificationUrl;
   final String? signedPdfSha256;
   final List<Map<String, dynamic>>? signers;
+
+  DocumentSignResponse copyWith({
+    String? documentId,
+    String? chainId,
+    int? versionNumber,
+    String? signedPdfDownloadUrl,
+    String? verificationUrl,
+    String? signedPdfSha256,
+    List<Map<String, dynamic>>? signers,
+  }) {
+    return DocumentSignResponse(
+      documentId: documentId ?? this.documentId,
+      chainId: chainId ?? this.chainId,
+      versionNumber: versionNumber ?? this.versionNumber,
+      signedPdfDownloadUrl: signedPdfDownloadUrl ?? this.signedPdfDownloadUrl,
+      verificationUrl: verificationUrl ?? this.verificationUrl,
+      signedPdfSha256: signedPdfSha256 ?? this.signedPdfSha256,
+      signers: signers ?? this.signers,
+    );
+  }
 
   static DocumentSignResponse fromJsonString(String body) {
     final decoded = jsonDecode(body);

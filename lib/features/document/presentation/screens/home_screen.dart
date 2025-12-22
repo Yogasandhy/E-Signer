@@ -152,7 +152,6 @@ class DocumentUploadInformationWidget extends StatelessWidget {
 
                     await showDocumentVerifyResultDialog(
                       context: context,
-                      tenantId: tenantId,
                       fileName: DocumentWorkspace.basename(pdfFile.path),
                       result: check,
                     );

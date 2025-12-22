@@ -34,16 +34,17 @@ class AuthApi {
   }
 
   Future<AuthLoginResponse> register({
-    required String tenant,
+    required String tenantName,
+    String? tenantSlug,
     required String name,
     required String email,
     required String password,
     required String passwordConfirmation,
-    String deviceName = 'android',
+    String? role,
   }) async {
-    final t = tenant.trim();
-    if (t.isEmpty) {
-      throw const ApiException('Tenant is required.');
+    final n = tenantName.trim();
+    if (n.isEmpty) {
+      throw const ApiException('Tenant name is required.');
     }
     if (name.trim().isEmpty) {
       throw const ApiException('Name is required.');
@@ -58,15 +59,26 @@ class AuthApi {
       throw const ApiException('Password confirmation is required.');
     }
 
+    final resolvedTenantSlug = tenantSlug?.trim();
+    final resolvedRole = role?.trim();
+
+    final payload = <String, dynamic>{
+      'tenantName': n,
+      'name': name.trim(),
+      'email': email.trim(),
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+    };
+    if (resolvedTenantSlug != null && resolvedTenantSlug.isNotEmpty) {
+      payload['tenantSlug'] = resolvedTenantSlug;
+    }
+    if (resolvedRole != null && resolvedRole.isNotEmpty) {
+      payload['role'] = resolvedRole;
+    }
+
     final body = await _apiClient.postJson(
-      uri: _apiClient.tenantUri(tenant: t, path: 'api/auth/register'),
-      jsonBody: <String, dynamic>{
-        'name': name.trim(),
-        'email': email.trim(),
-        'password': password,
-        'password_confirmation': passwordConfirmation,
-        'deviceName': deviceName,
-      },
+      uri: _apiClient.apiUri(path: 'api/tenants/register'),
+      jsonBody: payload,
       defaultErrorMessage: 'Register failed.',
     );
 
@@ -106,6 +118,7 @@ class AuthApi {
 
     final accessToken = map['accessToken']?.toString().trim();
     final tenantId = map['tenantId']?.toString().trim();
+    final tenantSlug = map['tenantSlug']?.toString().trim();
     final userId = map['userId']?.toString().trim();
 
     if (accessToken == null || accessToken.isEmpty) {
@@ -121,6 +134,7 @@ class AuthApi {
     return AuthLoginResponse(
       accessToken: accessToken,
       tenantId: tenantId,
+      tenantSlug: (tenantSlug == null || tenantSlug.isEmpty) ? null : tenantSlug,
       userId: userId,
     );
   }
@@ -130,10 +144,12 @@ class AuthLoginResponse {
   const AuthLoginResponse({
     required this.accessToken,
     required this.tenantId,
+    this.tenantSlug,
     required this.userId,
   });
 
   final String accessToken;
   final String tenantId;
+  final String? tenantSlug;
   final String userId;
 }

@@ -91,6 +91,7 @@ class DocumentRepositoryImpl implements DocumentRepository {
     required File originalPdf,
     required String userId,
     required bool consent,
+    String? idempotencyKey,
   }) async {
     if (!consent) return null;
 
@@ -104,10 +105,13 @@ class DocumentRepositoryImpl implements DocumentRepository {
       accessToken: accessToken,
       pdfFile: basePdf,
       consent: consent,
+      idempotencyKey: idempotencyKey,
     );
 
-    final signedBytes =
-        await documentApi.downloadPdfBytes(url: sign.signedPdfDownloadUrl);
+    final signedBytes = await documentApi.downloadPdfBytes(
+      url: sign.signedPdfDownloadUrl,
+      accessToken: accessToken,
+    );
 
     final saved = await documentLocalDataSource.saveSignedPdfAsNewVersion(
       originalPdf: originalPdf,

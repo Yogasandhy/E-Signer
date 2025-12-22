@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
+import '../../../../core/network/tenant_public_api.dart';
 import '../../../../core/network/verify_api.dart';
 import '../../domain/entities/document_signer.dart';
 import '../../../../presentation/app_theme.dart';
@@ -9,7 +10,6 @@ import '../../../../presentation/components/dialog.dart';
 
 Future<void> showDocumentVerifyResultDialog({
   required BuildContext context,
-  String? tenantId,
   String? fileName,
   required VerifyResponse result,
 }) async {
@@ -37,6 +37,11 @@ Future<void> showDocumentVerifyResultDialog({
       if (signer != null) signers.add(signer);
     }
   }
+
+  final tenantNames = signers.isEmpty
+      ? const <String, String>{}
+      : await _resolveTenantNames(context: context, signers: signers);
+  if (!context.mounted) return;
 
   await showCustomDialog<void>(
     context: context,
@@ -94,58 +99,19 @@ Future<void> showDocumentVerifyResultDialog({
           const SizedBox(height: 14),
           Divider(color: theme.dividerColor),
           const SizedBox(height: 10),
-          if ((tenantId ?? '').trim().isNotEmpty) ...[
-            _KeyValue(label: 'Tenant', value: tenantId!.trim()),
-            const SizedBox(height: 10),
-          ],
           if ((fileName ?? '').trim().isNotEmpty) ...[
             _KeyValue(label: 'File', value: fileName!.trim()),
-            const SizedBox(height: 10),
-          ],
-          if ((result.documentId ?? '').trim().isNotEmpty) ...[
-            _KeyValue(label: 'Dokumen', value: result.documentId!.trim()),
-            const SizedBox(height: 10),
-          ],
-          if ((result.chainId ?? '').trim().isNotEmpty) ...[
-            _KeyValue(label: 'Chain', value: result.chainId!.trim()),
             const SizedBox(height: 10),
           ],
           if (result.versionNumber != null) ...[
             _KeyValue(label: 'Versi', value: 'v${result.versionNumber}'),
             const SizedBox(height: 10),
           ],
-          if ((result.signedPdfDownloadUrl ?? '').trim().isNotEmpty) ...[
-            _CopyBox(
-              label: 'Download URL',
-              value: result.signedPdfDownloadUrl!.trim(),
-              onCopy: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: result.signedPdfDownloadUrl!.trim()),
-                );
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Link copied')),
-                );
-              },
+          if (signers.isNotEmpty)
+            _SignerHistoryBox(
+              signers: signers,
+              tenantNames: tenantNames,
             ),
-            const SizedBox(height: 10),
-          ],
-          if ((result.signedPdfSha256 ?? '').trim().isNotEmpty) ...[
-            _HashBox(
-              sha256Hex: result.signedPdfSha256!.trim(),
-              onCopy: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: result.signedPdfSha256!.trim()),
-                );
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('SHA-256 copied')),
-                );
-              },
-            ),
-            const SizedBox(height: 10),
-          ],
-          if (signers.isNotEmpty) _SignerHistoryBox(signers: signers),
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerRight,
@@ -215,119 +181,14 @@ class _KeyValue extends StatelessWidget {
   }
 }
 
-class _CopyBox extends StatelessWidget {
-  const _CopyBox({
-    required this.label,
-    required this.value,
-    required this.onCopy,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.withAlpha(16),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withAlpha(50)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Copy',
-                onPressed: onCopy,
-                icon: Icon(MdiIcons.contentCopy, size: 18),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          SelectableText(
-            value,
-            style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HashBox extends StatelessWidget {
-  const _HashBox({
-    required this.sha256Hex,
-    required this.onCopy,
-  });
-
-  final String sha256Hex;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.withAlpha(16),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withAlpha(50)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'SHA-256',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Copy',
-                onPressed: onCopy,
-                icon: Icon(MdiIcons.contentCopy, size: 18),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          SelectableText(
-            sha256Hex,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SignerHistoryBox extends StatelessWidget {
-  const _SignerHistoryBox({required this.signers});
+  const _SignerHistoryBox({
+    required this.signers,
+    required this.tenantNames,
+  });
 
   final List<DocumentSigner> signers;
+  final Map<String, String> tenantNames;
 
   @override
   Widget build(BuildContext context) {
@@ -344,67 +205,172 @@ class _SignerHistoryBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Riwayat Tanda Tangan',
+            'Penandatangan',
             style: theme.textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w800,
               color: AppTheme.secoundColor,
             ),
           ),
           const SizedBox(height: 8),
-          ...signers.map((s) {
-            final index = s.index.toString();
-            final tenantId = s.tenantId;
-            final userId = s.userId;
-            final signedAtIso = s.signedAtIso;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppTheme.secoundColor.withAlpha(22),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      index,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppTheme.secoundColor,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+          ...(() {
+            final groups = <String, List<DocumentSigner>>{};
+            final order = <String>[];
+
+            for (final signer in signers) {
+              final rawTenant = signer.tenantId.trim();
+              final tenant = rawTenant.isNotEmpty ? rawTenant : 'Tenant';
+              final list = groups.putIfAbsent(tenant, () {
+                order.add(tenant);
+                return <DocumentSigner>[];
+              });
+              list.add(signer);
+            }
+
+            final widgets = <Widget>[];
+
+            for (var i = 0; i < order.length; i++) {
+              final tenant = order[i];
+              final tenantSigners = groups[tenant] ?? const <DocumentSigner>[];
+              final resolvedTenantName =
+                  (tenantNames[tenant] ?? tenant).trim().isEmpty
+                      ? 'Tenant'
+                      : (tenantNames[tenant] ?? tenant).trim();
+
+              widgets.add(
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
+                  decoration: BoxDecoration(
+                    color: AppTheme.secoundColor.withAlpha(18),
+                    borderRadius: BorderRadius.circular(999),
+                    border:
+                        Border.all(color: AppTheme.secoundColor.withAlpha(40)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.apartment_rounded,
+                        size: 14,
+                        color: AppTheme.secoundColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        resolvedTenantName,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: AppTheme.secoundColor,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+              widgets.add(const SizedBox(height: 8));
+
+              for (final s in tenantSigners) {
+                final index = s.index.toString();
+                final userId = s.userId;
+                final name = (s.name ?? '').trim();
+                final email = (s.email ?? '').trim();
+                final displayName = name.isNotEmpty ? name : userId;
+
+                widgets.add(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '$tenantId • $userId',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w700,
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppTheme.secoundColor.withAlpha(22),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                        ),
-                        if (signedAtIso.trim().isNotEmpty)
-                          Text(
-                            signedAtIso.replaceFirst('T', ' '),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[700],
-                              height: 1.2,
+                          child: Text(
+                            index,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: AppTheme.secoundColor,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (email.isNotEmpty)
+                                Text(
+                                  email,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[700],
+                                    height: 1.2,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            );
-          }),
+                );
+              }
+
+              if (i != order.length - 1) {
+                widgets.add(const SizedBox(height: 10));
+              }
+            }
+
+            return widgets;
+          })(),
         ],
       ),
     );
   }
+}
+
+Future<Map<String, String>> _resolveTenantNames({
+  required BuildContext context,
+  required List<DocumentSigner> signers,
+}) async {
+  final api = context.read<TenantPublicApi>();
+  final tenantKeys = signers
+      .map((s) => s.tenantId.trim())
+      .where((t) => t.isNotEmpty)
+      .toSet();
+  if (tenantKeys.isEmpty) return const <String, String>{};
+
+  final entries = await Future.wait(
+    tenantKeys.map((t) async {
+      try {
+        final info = await api.getInfo(tenant: t).timeout(
+              const Duration(seconds: 6),
+            );
+        return MapEntry(t, info.name.trim());
+      } catch (_) {
+        return MapEntry(t, t);
+      }
+    }),
+  );
+
+  final resolved = <String, String>{};
+  for (final entry in entries) {
+    final value = entry.value.trim();
+    if (value.isNotEmpty) {
+      resolved[entry.key] = value;
+    }
+  }
+  return resolved;
 }

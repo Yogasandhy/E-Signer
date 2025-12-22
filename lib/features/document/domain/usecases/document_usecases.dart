@@ -68,6 +68,7 @@ class DocumentUseCases {
     required File originalPdf,
     required String userId,
     required bool consent,
+    String? idempotencyKey,
   }) {
     return _repository.requestDocumentSigning(
       tenantId: tenantId,
@@ -75,6 +76,7 @@ class DocumentUseCases {
       originalPdf: originalPdf,
       userId: userId,
       consent: consent,
+      idempotencyKey: idempotencyKey,
     );
   }
 }

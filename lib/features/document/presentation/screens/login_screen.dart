@@ -5,8 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/storage_keys.dart';
 import '../../../../core/network/auth_api.dart';
 import '../../../../presentation/app_theme.dart';
-import '../../../../presentation/components/field_label.dart';
 import 'verify_document_screen.dart';
+import 'login_form.dart';
+import 'register_form.dart';
 
 enum _AuthFormMode {
   login,
@@ -41,6 +42,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _tenantController = TextEditingController();
+  final TextEditingController _tenantNameController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -129,21 +131,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submitRegister() async {
     if (_isSubmitting) return;
-    final tenantId = _tenantController.text.trim();
+    final tenantSlug = _tenantController.text.trim();
+    final tenantName = _tenantNameController.text.trim();
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final passwordConfirmation = _passwordConfirmationController.text;
 
     setState(() => _errorText = null);
-    if (tenantId.isEmpty ||
+    if (tenantName.isEmpty ||
         name.isEmpty ||
         email.isEmpty ||
         password.isEmpty ||
         passwordConfirmation.isEmpty) {
       setState(
         () => _errorText =
-            'Tenant, nama, email, password, dan konfirmasi password wajib diisi.',
+            'Nama perusahaan, nama, email, password, dan konfirmasi password wajib diisi.',
       );
       return;
     }
@@ -160,25 +163,32 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final authApi = context.read<AuthApi>();
       final register = await authApi.register(
-        tenant: tenantId,
+        tenantName: tenantName,
+        tenantSlug: tenantSlug.isEmpty ? null : tenantSlug,
         name: name,
         email: email,
         password: password,
         passwordConfirmation: passwordConfirmation,
-        deviceName: 'android',
       );
+
+      final resolvedTenantSlug =
+          (register.tenantSlug ?? '').trim().isNotEmpty ? register.tenantSlug!.trim() : tenantSlug;
+      if (resolvedTenantSlug.trim().isEmpty) {
+        throw Exception('Register response missing tenantSlug.');
+      }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(keyAccessToken, register.accessToken);
-      await prefs.setString(keyTenantId, tenantId);
+      await prefs.setString(keyTenantId, resolvedTenantSlug);
       await prefs.setString(keyUserId, register.userId);
       await prefs.setString(keyUserEmail, email);
 
       if (!mounted) return;
       setState(() => _isSubmitting = false);
+      _tenantController.text = resolvedTenantSlug;
       widget.onLoggedIn(
         LoginSession(
-          tenantId: tenantId,
+          tenantId: resolvedTenantSlug,
           userId: register.userId,
           userEmail: email,
           accessToken: register.accessToken,
@@ -196,6 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _tenantController.dispose();
+    _tenantNameController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -241,6 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 child: DefaultTabController(
+                  initialIndex: 1,
                   length: 2,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -285,273 +297,62 @@ class _LoginScreenState extends State<LoginScreen> {
                               return IndexedStack(
                                 index: controller.index,
                                 children: [
-                                  Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      const FieldLabel(
-                                        text: 'Tenant / Perusahaan',
-                                      ),
-                                      const SizedBox(height: 6),
-                                      TextField(
-                                        controller: _tenantController,
-                                        enabled: !_isSubmitting,
-                                        cursorColor: Colors.black,
-                                        textInputAction: TextInputAction.next,
-                                        decoration: InputDecoration(
-                                          hintText: 'contoh: demo',
-                                          prefixIcon: const Icon(
-                                            Icons.apartment_rounded,
+                                  _formMode == _AuthFormMode.login
+                                      ? LoginForm(
+                                          tenantController: _tenantController,
+                                          emailController: _emailController,
+                                          passwordController:
+                                              _passwordController,
+                                          isSubmitting: _isSubmitting,
+                                          passwordVisible: _passwordVisible,
+                                          onTogglePasswordVisible: () =>
+                                              setState(
+                                            () => _passwordVisible =
+                                                !_passwordVisible,
                                           ),
-                                          filled: true,
-                                          fillColor: Colors.grey.shade50,
-                                          border: baseBorder,
-                                          enabledBorder: baseBorder,
+                                          onSubmit: _submitLogin,
+                                          onSwitchToRegister: () =>
+                                              _setFormMode(
+                                            _AuthFormMode.register,
+                                          ),
+                                          baseBorder: baseBorder,
                                           focusedBorder: focusedBorder,
-                                        ),
-                                        onSubmitted: (_) => FocusScope.of(context)
-                                            .nextFocus(),
-                                      ),
-                                      if (_formMode == _AuthFormMode.register) ...[
-                                        const SizedBox(height: 14),
-                                        const FieldLabel(text: 'Nama'),
-                                        const SizedBox(height: 6),
-                                        TextField(
-                                          controller: _nameController,
-                                          enabled: !_isSubmitting,
-                                          cursorColor: Colors.black,
-                                          textInputAction: TextInputAction.next,
-                                          decoration: InputDecoration(
-                                            hintText: 'nama lengkap',
-                                            prefixIcon: const Icon(
-                                              Icons.person_rounded,
-                                            ),
-                                            filled: true,
-                                            fillColor: Colors.grey.shade50,
-                                            border: baseBorder,
-                                            enabledBorder: baseBorder,
-                                            focusedBorder: focusedBorder,
-                                          ),
-                                          onSubmitted: (_) =>
-                                              FocusScope.of(context).nextFocus(),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 14),
-                                      const FieldLabel(text: 'Email'),
-                                      const SizedBox(height: 6),
-                                      TextField(
-                                        controller: _emailController,
-                                        enabled: !_isSubmitting,
-                                        cursorColor: Colors.black,
-                                        keyboardType:
-                                            TextInputType.emailAddress,
-                                        textInputAction: TextInputAction.next,
-                                        decoration: InputDecoration(
-                                          hintText: 'contoh: test@example.com',
-                                          prefixIcon: const Icon(
-                                            Icons.email_rounded,
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.grey.shade50,
-                                          border: baseBorder,
-                                          enabledBorder: baseBorder,
-                                          focusedBorder: focusedBorder,
-                                        ),
-                                        onSubmitted: (_) => FocusScope.of(context)
-                                            .nextFocus(),
-                                      ),
-                                      const SizedBox(height: 14),
-                                      const FieldLabel(text: 'Password'),
-                                      const SizedBox(height: 6),
-                                      TextField(
-                                        controller: _passwordController,
-                                        enabled: !_isSubmitting,
-                                        cursorColor: Colors.black,
-                                        obscureText: !_passwordVisible,
-                                        textInputAction:
-                                            _formMode == _AuthFormMode.login
-                                                ? TextInputAction.done
-                                                : TextInputAction.next,
-                                        decoration: InputDecoration(
-                                          hintText: 'contoh: secret123',
-                                          prefixIcon:
-                                              const Icon(Icons.lock_rounded),
-                                          suffixIcon: IconButton(
-                                            tooltip: _passwordVisible
-                                                ? 'Hide password'
-                                                : 'Show password',
-                                            icon: Icon(
-                                              _passwordVisible
-                                                  ? Icons.visibility_off_rounded
-                                                  : Icons.visibility_rounded,
-                                            ),
-                                            onPressed: _isSubmitting
-                                                ? null
-                                                : () => setState(
-                                                      () => _passwordVisible =
-                                                          !_passwordVisible,
-                                                    ),
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.grey.shade50,
-                                          border: baseBorder,
-                                          enabledBorder: baseBorder,
-                                          focusedBorder: focusedBorder,
-                                        ),
-                                        onSubmitted: (_) {
-                                          if (_formMode == _AuthFormMode.login) {
-                                            _submitLogin();
-                                          } else {
-                                            FocusScope.of(context).nextFocus();
-                                          }
-                                        },
-                                      ),
-                                      if (_formMode == _AuthFormMode.register) ...[
-                                        const SizedBox(height: 14),
-                                        const FieldLabel(
-                                          text: 'Konfirmasi Password',
-                                        ),
-                                        const SizedBox(height: 6),
-                                        TextField(
-                                          controller:
+                                          errorText: _errorText,
+                                        )
+                                      : RegisterForm(
+                                          tenantSlugController:
+                                              _tenantController,
+                                          tenantNameController:
+                                              _tenantNameController,
+                                          nameController: _nameController,
+                                          emailController: _emailController,
+                                          passwordController:
+                                              _passwordController,
+                                          passwordConfirmationController:
                                               _passwordConfirmationController,
-                                          enabled: !_isSubmitting,
-                                          cursorColor: Colors.black,
-                                          obscureText:
-                                              !_passwordConfirmationVisible,
-                                          textInputAction: TextInputAction.done,
-                                          decoration: InputDecoration(
-                                            hintText: 'ulang password',
-                                            prefixIcon: const Icon(
-                                              Icons.lock_outline_rounded,
-                                            ),
-                                            suffixIcon: IconButton(
-                                              tooltip:
-                                                  _passwordConfirmationVisible
-                                                      ? 'Hide password'
-                                                      : 'Show password',
-                                              icon: Icon(
-                                                _passwordConfirmationVisible
-                                                    ? Icons
-                                                        .visibility_off_rounded
-                                                    : Icons.visibility_rounded,
-                                              ),
-                                              onPressed: _isSubmitting
-                                                  ? null
-                                                  : () => setState(
-                                                        () =>
-                                                            _passwordConfirmationVisible =
-                                                                !_passwordConfirmationVisible,
-                                                      ),
-                                            ),
-                                            filled: true,
-                                            fillColor: Colors.grey.shade50,
-                                            border: baseBorder,
-                                            enabledBorder: baseBorder,
-                                            focusedBorder: focusedBorder,
+                                          isSubmitting: _isSubmitting,
+                                          passwordVisible: _passwordVisible,
+                                          passwordConfirmationVisible:
+                                              _passwordConfirmationVisible,
+                                          onTogglePasswordVisible: () =>
+                                              setState(
+                                            () => _passwordVisible =
+                                                !_passwordVisible,
                                           ),
-                                          onSubmitted: (_) => _submitRegister(),
+                                          onTogglePasswordConfirmationVisible:
+                                              () => setState(
+                                            () =>
+                                                _passwordConfirmationVisible =
+                                                    !_passwordConfirmationVisible,
+                                          ),
+                                          onSubmit: _submitRegister,
+                                          onSwitchToLogin: () => _setFormMode(
+                                            _AuthFormMode.login,
+                                          ),
+                                          baseBorder: baseBorder,
+                                          focusedBorder: focusedBorder,
+                                          errorText: _errorText,
                                         ),
-                                      ],
-                                      if (_errorText != null &&
-                                          _errorText!.trim().isNotEmpty) ...[
-                                        const SizedBox(height: 12),
-                                        Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red.withAlpha(16),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: Colors.red.withAlpha(40),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _errorText!,
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                              color: Colors.red[700],
-                                              height: 1.3,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 14),
-                                      SizedBox(
-                                        height: 48,
-                                        child: ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                AppTheme.secoundColor,
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                          onPressed:
-                                              _isSubmitting
-                                                  ? null
-                                                  : (_formMode ==
-                                                          _AuthFormMode.login
-                                                      ? _submitLogin
-                                                      : _submitRegister),
-                                          child: _isSubmitting
-                                              ? const SizedBox(
-                                                  width: 22,
-                                                  height: 22,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: Colors.white,
-                                                  ),
-                                                )
-                                              : Text(
-                                                  _formMode ==
-                                                          _AuthFormMode.login
-                                                      ? 'Masuk'
-                                                      : 'Daftar',
-                                                ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            _formMode == _AuthFormMode.login
-                                                ? 'Belum punya akun?'
-                                                : 'Sudah punya akun?',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                              color: Colors.grey[700],
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          TextButton(
-                                            onPressed: _isSubmitting
-                                                ? null
-                                                : () => _setFormMode(
-                                                      _formMode ==
-                                                              _AuthFormMode.login
-                                                          ? _AuthFormMode.register
-                                                          : _AuthFormMode.login,
-                                                    ),
-                                            child: Text(
-                                              _formMode == _AuthFormMode.login
-                                                  ? 'Register'
-                                                  : 'Login',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
                                   VerifyDocumentScreen(
                                     tenantController: _tenantController,
                                   ),

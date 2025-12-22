@@ -13,6 +13,11 @@ class ApiClient {
   final String baseUrl;
   final HttpClient _httpClient;
 
+  Uri apiUri({required String path}) {
+    final p = path.startsWith('/') ? path.substring(1) : path;
+    return Uri.parse('$baseUrl/$p');
+  }
+
   Uri tenantUri({
     required String tenant,
     required String path,
@@ -37,7 +42,27 @@ class ApiClient {
       throw const ApiException('Invalid URL.');
     }
 
-    return parsed.isAbsolute ? parsed : Uri.parse('$baseUrl/').resolveUri(parsed);
+    if (!parsed.isAbsolute) {
+      return Uri.parse('$baseUrl/').resolveUri(parsed);
+    }
+
+    if (_isLoopbackHost(parsed.host)) {
+      final base = Uri.parse(baseUrl);
+      final resolvedPort =
+          base.hasPort ? base.port : (base.scheme == 'https' ? 443 : 80);
+      return parsed.replace(
+        scheme: base.scheme,
+        host: base.host,
+        port: resolvedPort,
+      );
+    }
+
+    return parsed;
+  }
+
+  bool _isLoopbackHost(String host) {
+    final h = host.trim().toLowerCase();
+    return h == 'localhost' || h == '127.0.0.1' || h == '0.0.0.0';
   }
 
   Future<String> getJson({

@@ -8,6 +8,7 @@ import 'core/constants/storage_keys.dart';
 import 'core/network/api_client.dart';
 import 'core/network/auth_api.dart';
 import 'core/network/document_api.dart';
+import 'core/network/tenant_public_api.dart';
 import 'core/network/verify_api.dart';
 import 'features/document/data/datasources/document_local_data_source.dart';
 import 'features/document/data/datasources/recent_file_local_data_source.dart';
@@ -34,6 +35,7 @@ Future<void> main() async {
   );
 
   final authApi = AuthApi(apiClient: apiClient);
+  final tenantPublicApi = TenantPublicApi(apiClient: apiClient);
   final verifyApi = VerifyApi(apiClient: apiClient);
   final documentUseCases = DocumentUseCases.fromRepository(documentRepository);
   final prefs = await SharedPreferences.getInstance();
@@ -46,6 +48,7 @@ Future<void> main() async {
     MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: authApi),
+        RepositoryProvider.value(value: tenantPublicApi),
         RepositoryProvider.value(value: verifyApi),
         RepositoryProvider.value(value: documentUseCases),
       ],
@@ -107,7 +110,6 @@ class _AppRootState extends State<_AppRoot> {
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(keyAccessToken);
-    await prefs.remove(keyTenantId);
     await prefs.remove(keyUserId);
     await prefs.remove(keyUserEmail);
     if (!mounted) return;

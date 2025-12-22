@@ -35,5 +35,6 @@ abstract class DocumentRepository {
     required File originalPdf,
     required String userId,
     required bool consent,
+    String? idempotencyKey,
   });
 }

@@ -34,38 +34,16 @@ class VerifyApi {
       defaultErrorMessage: 'Verify failed.',
     );
 
-    return VerifyResponse.fromJsonString(body);
-  }
-
-  Future<VerifyResponse> verifyByChain({
-    required String tenant,
-    required String chainId,
-    required int versionNumber,
-  }) async {
-    final t = tenant.trim();
-    if (t.isEmpty) {
-      throw const ApiException('Tenant is required.');
-    }
-    final c = chainId.trim();
-    if (c.isEmpty) {
-      throw const ApiException('chainId is required.');
-    }
-    if (versionNumber < 1) {
-      throw const ApiException('versionNumber must be >= 1.');
-    }
-
-    final body = await _apiClient.getJson(
-      uri: _apiClient.tenantUri(tenant: t, path: 'api/verify/$c/v$versionNumber'),
-      defaultErrorMessage: 'Verify failed.',
-    );
-
     final parsed = VerifyResponse.fromJsonString(body);
-    return parsed.copyWith(
-      chainId: (parsed.chainId == null || parsed.chainId!.trim().isEmpty)
-          ? c
-          : parsed.chainId,
-      versionNumber: parsed.versionNumber ?? versionNumber,
-    );
+
+    final url = parsed.signedPdfDownloadUrl?.trim();
+    if (url != null && url.isNotEmpty) {
+      return parsed.copyWith(
+        signedPdfDownloadUrl: _apiClient.resolveUrl(url).toString(),
+      );
+    }
+
+    return parsed;
   }
 }
 
