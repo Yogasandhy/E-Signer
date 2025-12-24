@@ -6,7 +6,6 @@ import '../../../../presentation/components/field_label.dart';
 class LoginForm extends StatelessWidget {
   const LoginForm({
     super.key,
-    required this.tenantController,
     required this.emailController,
     required this.passwordController,
     required this.isSubmitting,
@@ -18,12 +17,10 @@ class LoginForm extends StatelessWidget {
     required this.baseBorder,
     required this.focusedBorder,
     this.errorText,
-    this.tenantErrorText,
     this.emailErrorText,
     this.passwordErrorText,
   });
 
-  final TextEditingController tenantController;
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final bool isSubmitting;
@@ -33,7 +30,6 @@ class LoginForm extends StatelessWidget {
   final VoidCallback onSubmit;
   final VoidCallback onSwitchToRegister;
   final String? errorText;
-  final String? tenantErrorText;
   final String? emailErrorText;
   final String? passwordErrorText;
   final OutlineInputBorder baseBorder;
@@ -47,26 +43,6 @@ class LoginForm extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const FieldLabel(text: 'Tenant / Perusahaan'),
-        const SizedBox(height: 6),
-        TextField(
-          controller: tenantController,
-          enabled: !isSubmitting,
-          cursorColor: Colors.black,
-          textInputAction: TextInputAction.next,
-          decoration: InputDecoration(
-            hintText: 'demo',
-            prefixIcon: const Icon(Icons.apartment_rounded),
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            border: baseBorder,
-            enabledBorder: baseBorder,
-            focusedBorder: focusedBorder,
-            errorText: tenantErrorText,
-          ),
-          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-        ),
-        const SizedBox(height: 14),
         const FieldLabel(text: 'Email'),
         const SizedBox(height: 6),
         TextField(

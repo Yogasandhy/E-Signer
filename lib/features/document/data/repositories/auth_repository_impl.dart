@@ -1,11 +1,64 @@
 import '../../../../core/network/auth_api.dart';
 import '../../domain/entities/auth_session.dart';
+import '../../domain/entities/central_login_result.dart';
+import '../../domain/entities/select_tenant_result.dart';
+import '../../domain/entities/tenant_membership.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl({required AuthApi api}) : _api = api;
 
   final AuthApi _api;
+
+  @override
+  Future<CentralLoginResult> loginCentral({
+    required String email,
+    required String password,
+  }) async {
+    final resp = await _api.loginCentral(
+      email: email,
+      password: password,
+    );
+
+    return CentralLoginResult(
+      accessToken: resp.accessToken,
+      userId: resp.user.userId,
+      userEmail: resp.user.email,
+      tenants: resp.tenants
+          .map(
+            (t) => TenantMembership(
+              id: t.id,
+              name: t.name,
+              slug: t.slug,
+              role: t.role,
+              isOwner: t.isOwner,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  @override
+  Future<SelectTenantResult> selectTenant({
+    required String centralAccessToken,
+    required String tenant,
+  }) async {
+    final resp = await _api.selectTenant(
+      centralAccessToken: centralAccessToken,
+      tenant: tenant,
+    );
+
+    return SelectTenantResult(
+      accessToken: resp.accessToken,
+      tenant: TenantMembership(
+        id: resp.tenant.id,
+        name: resp.tenant.name,
+        slug: resp.tenant.slug,
+        role: resp.tenant.role,
+        isOwner: resp.tenant.isOwner,
+      ),
+    );
+  }
 
   @override
   Future<AuthSession> login({
@@ -65,4 +118,3 @@ class AuthRepositoryImpl implements AuthRepository {
     return _api.me(tenant: tenant, accessToken: accessToken);
   }
 }
-

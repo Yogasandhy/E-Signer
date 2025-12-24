@@ -7,7 +7,7 @@ import 'package:ttd/features/document/utils/document_workspace.dart';
 void main() {
   group('DocumentWorkspace', () {
     // Normalisasi path supaya assertion stabil di Windows (\\) / Linux (/).
-    String _normPath(String path) => path.replaceAll('\\', '/').toLowerCase();
+    String normPath(String path) => path.replaceAll('\\', '/').toLowerCase();
 
     test('resolveLatestPdfSync returns latest version when available', () async {
       // Setup workspace:
@@ -29,7 +29,7 @@ void main() {
       await v10.writeAsBytes(const [100]);
 
       final resolved = DocumentWorkspace.resolveLatestPdfSync(original.path);
-      expect(_normPath(resolved.absolute.path), _normPath(v10.absolute.path));
+      expect(normPath(resolved.absolute.path), normPath(v10.absolute.path));
     });
 
     test('resolveLatestPdfSync falls back to original.pdf when no versions', () async {
@@ -45,8 +45,8 @@ void main() {
 
       final resolved = DocumentWorkspace.resolveLatestPdfSync(original.path);
       expect(
-        _normPath(resolved.absolute.path),
-        _normPath(original.absolute.path),
+        normPath(resolved.absolute.path),
+        normPath(original.absolute.path),
       );
     });
 

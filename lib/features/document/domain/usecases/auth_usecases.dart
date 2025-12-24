@@ -1,4 +1,5 @@
 import '../entities/auth_session.dart';
+import '../entities/central_login_result.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/session_repository.dart';
 
@@ -11,6 +12,52 @@ class AuthUseCases {
 
   final AuthRepository _authRepository;
   final SessionRepository _sessionRepository;
+
+  Future<CentralLoginResult> loginCentral({
+    required String email,
+    required String password,
+  }) {
+    return _authRepository.loginCentral(
+      email: email,
+      password: password,
+    );
+  }
+
+  Future<AuthSession> selectTenant({
+    required String centralAccessToken,
+    required String tenant,
+    required String userId,
+    required String userEmail,
+  }) async {
+    final selection = await _authRepository.selectTenant(
+      centralAccessToken: centralAccessToken,
+      tenant: tenant,
+    );
+
+    final role = (selection.tenant.role ?? '').trim().toLowerCase();
+    if (role != 'user') {
+      throw Exception(
+        'Role "${selection.tenant.role ?? '-'}" tidak didukung di aplikasi ini. Gunakan akun role user.',
+      );
+    }
+
+    final resolvedTenant = selection.tenant.slug.trim();
+
+    await _sessionRepository.save(
+      accessToken: selection.accessToken,
+      tenant: resolvedTenant,
+      userId: userId,
+      userEmail: userEmail,
+    );
+    await _sessionRepository.setLastTenant(resolvedTenant);
+
+    return AuthSession(
+      accessToken: selection.accessToken,
+      tenant: resolvedTenant,
+      userId: userId,
+      tenantSlug: selection.tenant.slug,
+    );
+  }
 
   Future<AuthSession> login({
     required String tenant,
@@ -79,4 +126,3 @@ class AuthUseCases {
     );
   }
 }
-

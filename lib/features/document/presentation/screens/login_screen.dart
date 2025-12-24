@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/errors/api_exception.dart';
+import '../../domain/entities/tenant_membership.dart';
 import '../../domain/usecases/auth_usecases.dart';
 import '../../../../presentation/app_theme.dart';
 import 'verify_document_screen.dart';
 import 'login_form.dart';
 import 'register_form.dart';
+import '../widgets/tenant_picker_dialog.dart';
 
 enum _AuthFormMode {
   login,
@@ -85,13 +87,16 @@ class _LoginScreenState extends State<LoginScreen> {
     return value.isNotEmpty && _tenantSlugRegex.hasMatch(value);
   }
 
+  bool _isAllowedUserRole(String? role) {
+    final normalized = (role ?? '').trim().toLowerCase();
+    return normalized == 'user';
+  }
+
   bool get _canSubmitLogin {
-    final tenant = _tenantController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (tenant.isEmpty || email.isEmpty || password.isEmpty) return false;
-    if (!_isValidTenantSlug(tenant)) return false;
+    if (email.isEmpty || password.isEmpty) return false;
     if (!_isValidEmail(email)) return false;
     if (password.length < 8) return false;
     return true;
@@ -117,17 +122,6 @@ class _LoginScreenState extends State<LoginScreen> {
     if (password.length < 8) return false;
     if (password != passwordConfirmation) return false;
     return true;
-  }
-
-  String? get _loginTenantErrorText {
-    final tenant = _tenantController.text.trim();
-    if (tenant.isEmpty) {
-      return _loginAttempted ? 'Tenant wajib diisi.' : null;
-    }
-    if (!_tenantSlugRegex.hasMatch(tenant)) {
-      return 'Tenant tidak valid.';
-    }
-    return null;
   }
 
   String? get _loginEmailErrorText {
@@ -256,28 +250,67 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final tenantId = _tenantController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
     setState(() => _isSubmitting = true);
     try {
       final authUseCases = context.read<AuthUseCases>();
-      final login = await authUseCases.login(
-        tenant: tenantId,
+      final centralLogin = await authUseCases.loginCentral(
         email: email,
         password: password,
-        deviceName: 'android',
+      );
+
+      if (!mounted) return;
+      if (centralLogin.tenants.isEmpty) {
+        setState(() {
+          _isSubmitting = false;
+          _errorText =
+              'Akun kamu belum terdaftar di tenant manapun. Silakan hubungi admin.';
+        });
+        return;
+      }
+
+      final userTenants = centralLogin.tenants
+          .where((t) => _isAllowedUserRole(t.role))
+          .toList(growable: false);
+      if (userTenants.isEmpty) {
+        setState(() {
+          _isSubmitting = false;
+          _errorText =
+              'Akun ini tidak memiliki akses sebagai user. Gunakan akun role user atau aplikasi admin.';
+        });
+        return;
+      }
+
+      TenantMembership? selectedTenant;
+      if (userTenants.length == 1) {
+        selectedTenant = userTenants.first;
+      } else {
+        setState(() => _isSubmitting = false);
+        selectedTenant = await showTenantPickerDialog(
+          context: context,
+          tenants: userTenants,
+        );
+        if (!mounted || selectedTenant == null) return;
+        setState(() => _isSubmitting = true);
+      }
+
+      final tenantSession = await authUseCases.selectTenant(
+        centralAccessToken: centralLogin.accessToken,
+        tenant: selectedTenant.slug,
+        userId: centralLogin.userId,
+        userEmail: (centralLogin.userEmail ?? email).trim(),
       );
 
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       widget.onLoggedIn(
         LoginSession(
-          tenantId: tenantId,
-          userId: login.userId,
-          userEmail: email,
-          accessToken: login.accessToken,
+          tenantId: tenantSession.tenant,
+          userId: tenantSession.userId,
+          userEmail: (centralLogin.userEmail ?? email).trim(),
+          accessToken: tenantSession.accessToken,
         ),
       );
     } catch (e) {
@@ -440,7 +473,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 children: [
                                   _formMode == _AuthFormMode.login
                                       ? LoginForm(
-                                          tenantController: _tenantController,
                                           emailController: _emailController,
                                           passwordController:
                                               _passwordController,
@@ -460,7 +492,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                           baseBorder: baseBorder,
                                           focusedBorder: focusedBorder,
                                           errorText: _errorText,
-                                          tenantErrorText: _loginTenantErrorText,
                                           emailErrorText: _loginEmailErrorText,
                                           passwordErrorText:
                                               _loginPasswordErrorText,

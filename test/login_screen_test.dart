@@ -5,7 +5,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ttd/core/errors/api_exception.dart';
 import 'package:ttd/features/document/domain/entities/auth_session.dart';
+import 'package:ttd/features/document/domain/entities/central_login_result.dart';
+import 'package:ttd/features/document/domain/entities/select_tenant_result.dart';
 import 'package:ttd/features/document/domain/entities/stored_session.dart';
+import 'package:ttd/features/document/domain/entities/tenant_membership.dart';
 import 'package:ttd/features/document/domain/repositories/auth_repository.dart';
 import 'package:ttd/features/document/domain/repositories/session_repository.dart';
 import 'package:ttd/features/document/domain/usecases/auth_usecases.dart';
@@ -22,6 +25,22 @@ class _NoopAuthRepository implements AuthRepository {
   // Stub repo: sengaja tidak dipakai untuk request jaringan.
   // Digunakan untuk test "validasi UI" saja (tombol enable/disable, error per field).
   @override
+  Future<CentralLoginResult> loginCentral({
+    required String email,
+    required String password,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<SelectTenantResult> selectTenant({
+    required String centralAccessToken,
+    required String tenant,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<AuthSession> login({
     required String tenant,
     required String email,
@@ -53,54 +72,39 @@ class _NoopAuthRepository implements AuthRepository {
   }
 }
 
-class _ThrowingAuthRepository implements AuthRepository {
-  // Repo palsu untuk mensimulasikan login gagal (misalnya HTTP 401).
-  _ThrowingAuthRepository(this.error);
+typedef _LoginCentralHandler = Future<CentralLoginResult> Function(
+  String email,
+  String password,
+);
+typedef _SelectTenantHandler = Future<SelectTenantResult> Function(
+  String centralAccessToken,
+  String tenant,
+);
 
-  final Exception error;
-
-  @override
-  Future<AuthSession> login({
-    required String tenant,
-    required String email,
-    required String password,
-    String deviceName = 'android',
-  }) async {
-    throw error;
-  }
-
-  @override
-  Future<AuthSession> registerTenant({
-    required String tenantName,
-    String? tenantSlug,
-    required String name,
-    required String email,
-    required String password,
-    required String passwordConfirmation,
-    String? role,
-  }) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<void> me({
-    required String tenant,
-    required String accessToken,
-  }) {
-    throw UnimplementedError();
-  }
-}
-
-class _DelayedAuthRepository implements AuthRepository {
-  // Repo palsu untuk mensimulasikan login sukses tapi ada delay (agar bisa ngetes
-  // loading indicator di tombol).
-  _DelayedAuthRepository({
-    required this.delay,
-    required this.session,
+class _FakeAuthRepository implements AuthRepository {
+  const _FakeAuthRepository({
+    required this.loginCentralHandler,
+    required this.selectTenantHandler,
   });
 
-  final Duration delay;
-  final AuthSession session;
+  final _LoginCentralHandler loginCentralHandler;
+  final _SelectTenantHandler selectTenantHandler;
+
+  @override
+  Future<CentralLoginResult> loginCentral({
+    required String email,
+    required String password,
+  }) {
+    return loginCentralHandler(email, password);
+  }
+
+  @override
+  Future<SelectTenantResult> selectTenant({
+    required String centralAccessToken,
+    required String tenant,
+  }) {
+    return selectTenantHandler(centralAccessToken, tenant);
+  }
 
   @override
   Future<AuthSession> login({
@@ -109,7 +113,7 @@ class _DelayedAuthRepository implements AuthRepository {
     required String password,
     String deviceName = 'android',
   }) {
-    return Future<AuthSession>.delayed(delay, () => session);
+    throw UnimplementedError();
   }
 
   @override
@@ -222,10 +226,9 @@ void main() {
       );
 
       // Urutan TextField pada form login:
-      // 0 = tenant, 1 = email, 2 = password
-      await tester.enterText(find.byType(TextField).at(0), 'demo');
-      await tester.enterText(find.byType(TextField).at(1), 'user@example.com');
-      await tester.enterText(find.byType(TextField).at(2), '1234567');
+      // 0 = email, 1 = password
+      await tester.enterText(find.byType(TextField).at(0), 'user@example.com');
+      await tester.enterText(find.byType(TextField).at(1), '1234567');
       await tester.pump();
 
       expect(find.text('Password minimal 8 karakter.'), findsOneWidget);
@@ -235,7 +238,7 @@ void main() {
       );
 
       // Setelah password valid (>= 8), tombol harus enable.
-      await tester.enterText(find.byType(TextField).at(2), '12345678');
+      await tester.enterText(find.byType(TextField).at(1), '12345678');
       await tester.pump();
 
       expect(find.text('Password minimal 8 karakter.'), findsNothing);
@@ -312,8 +315,12 @@ void main() {
       await _pumpLoginScreen(
         tester,
         authUseCases: AuthUseCases(
-          authRepository: _ThrowingAuthRepository(
-            const ApiException('Unauthorized', statusCode: 401),
+          authRepository: _FakeAuthRepository(
+            loginCentralHandler: (_, _) => Future<CentralLoginResult>.error(
+              const ApiException('Unauthorized', statusCode: 401),
+            ),
+            selectTenantHandler: (_, _) =>
+                Future<SelectTenantResult>.error(UnimplementedError()),
           ),
           sessionRepository: _MemorySessionRepository(),
         ),
@@ -322,9 +329,8 @@ void main() {
       await tester.tap(find.text('Login'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).at(0), 'demo');
-      await tester.enterText(find.byType(TextField).at(1), 'user@example.com');
-      await tester.enterText(find.byType(TextField).at(2), '12345678');
+      await tester.enterText(find.byType(TextField).at(0), 'user@example.com');
+      await tester.enterText(find.byType(TextField).at(1), '12345678');
       await tester.pump();
 
       await tester.tap(find.widgetWithText(ElevatedButton, 'Masuk'));
@@ -342,13 +348,40 @@ void main() {
       await _pumpLoginScreen(
         tester,
         authUseCases: AuthUseCases(
-          authRepository: _DelayedAuthRepository(
-            delay: const Duration(milliseconds: 200),
-            session: const AuthSession(
-              accessToken: 'token-123',
-              tenant: 'demo',
-              userId: 'user-1',
-            ),
+          authRepository: _FakeAuthRepository(
+            loginCentralHandler: (email, password) {
+              return Future<CentralLoginResult>.delayed(
+                const Duration(milliseconds: 200),
+                () => CentralLoginResult(
+                  accessToken: 'central-123',
+                  userId: 'user-1',
+                  userEmail: email,
+                  tenants: const [
+                    TenantMembership(
+                      id: 'tenant-1',
+                      name: 'PT Demo Company',
+                      slug: 'demo',
+                      role: 'user',
+                      isOwner: false,
+                    ),
+                  ],
+                ),
+              );
+            },
+            selectTenantHandler: (_, tenant) {
+              return Future<SelectTenantResult>.value(
+                SelectTenantResult(
+                  accessToken: 'token-123',
+                  tenant: TenantMembership(
+                    id: 'tenant-1',
+                    name: 'PT Demo Company',
+                    slug: tenant,
+                    role: 'user',
+                    isOwner: false,
+                  ),
+                ),
+              );
+            },
           ),
           sessionRepository: _MemorySessionRepository(),
         ),
@@ -358,9 +391,8 @@ void main() {
       await tester.tap(find.text('Login'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).at(0), 'demo');
-      await tester.enterText(find.byType(TextField).at(1), 'user@example.com');
-      await tester.enterText(find.byType(TextField).at(2), '12345678');
+      await tester.enterText(find.byType(TextField).at(0), 'user@example.com');
+      await tester.enterText(find.byType(TextField).at(1), '12345678');
       await tester.pump();
 
       await tester.tap(find.widgetWithText(ElevatedButton, 'Masuk'));
@@ -381,6 +413,134 @@ void main() {
       // Loading hilang dan tombol kembali ke teks.
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.text('Masuk'), findsOneWidget);
+    });
+
+    testWidgets('blocks login for non-user roles', (tester) async {
+      var loggedInCalls = 0;
+
+      await _pumpLoginScreen(
+        tester,
+        authUseCases: AuthUseCases(
+          authRepository: _FakeAuthRepository(
+            loginCentralHandler: (email, password) {
+              return Future<CentralLoginResult>.value(
+                CentralLoginResult(
+                  accessToken: 'central-1',
+                  userId: 'admin-1',
+                  userEmail: email,
+                  tenants: const [
+                    TenantMembership(
+                      id: 'tenant-1',
+                      name: 'PT Demo Company',
+                      slug: 'demo',
+                      role: 'super_admin',
+                      isOwner: true,
+                    ),
+                  ],
+                ),
+              );
+            },
+            selectTenantHandler: (_, _) =>
+                Future<SelectTenantResult>.error(UnimplementedError()),
+          ),
+          sessionRepository: _MemorySessionRepository(),
+        ),
+        onLoggedIn: (_) => loggedInCalls++,
+      );
+
+      await tester.tap(find.text('Login'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), 'admin@example.com');
+      await tester.enterText(find.byType(TextField).at(1), '12345678');
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Masuk'));
+      await tester.pumpAndSettle();
+
+      expect(loggedInCalls, 0);
+      expect(
+        find.textContaining('tidak memiliki akses sebagai user'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('prompts tenant selection when multiple user tenants', (tester) async {
+      final completer = Completer<LoginSession>();
+
+      const tenants = [
+        TenantMembership(
+          id: 'tenant-1',
+          name: 'PT Demo Company',
+          slug: 'demo',
+          role: 'user',
+          isOwner: false,
+        ),
+        TenantMembership(
+          id: 'tenant-2',
+          name: 'PT Another Company',
+          slug: 'another',
+          role: 'super_admin',
+          isOwner: true,
+        ),
+        TenantMembership(
+          id: 'tenant-3',
+          name: 'PT Branch Company',
+          slug: 'branch',
+          role: 'user',
+          isOwner: false,
+        ),
+      ];
+
+      await _pumpLoginScreen(
+        tester,
+        authUseCases: AuthUseCases(
+          authRepository: _FakeAuthRepository(
+            loginCentralHandler: (email, password) {
+              return Future<CentralLoginResult>.value(
+                CentralLoginResult(
+                  accessToken: 'central-1',
+                  userId: 'user-1',
+                  userEmail: email,
+                  tenants: tenants,
+                ),
+              );
+            },
+            selectTenantHandler: (_, tenant) async {
+              final selected = tenants.firstWhere((t) => t.slug == tenant);
+              return SelectTenantResult(
+                accessToken: 'tenant-token-$tenant',
+                tenant: selected,
+              );
+            },
+          ),
+          sessionRepository: _MemorySessionRepository(),
+        ),
+        onLoggedIn: completer.complete,
+      );
+
+      await tester.tap(find.text('Login'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), 'user@example.com');
+      await tester.enterText(find.byType(TextField).at(1), '12345678');
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Masuk'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pilih Tenant'), findsOneWidget);
+      expect(find.text('PT Demo Company'), findsOneWidget);
+      expect(find.text('PT Another Company'), findsNothing);
+      expect(find.text('PT Branch Company'), findsOneWidget);
+
+      await tester.tap(find.text('PT Branch Company'));
+      await tester.pumpAndSettle();
+
+      expect(completer.isCompleted, isTrue);
+      final session = await completer.future;
+      expect(session.tenantId, 'branch');
+      expect(session.accessToken, 'tenant-token-branch');
     });
   });
 }
