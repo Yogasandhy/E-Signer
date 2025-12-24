@@ -5,11 +5,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:open_file/open_file.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/usecases/document_usecases.dart';
 import '../../utils/pdf_file_name.dart';
 import '../../utils/document_workspace.dart';
-import 'consent_screen.dart';
 import '../widgets/version_history_sheet.dart';
 import '../../../../presentation/app_theme.dart';
 
@@ -42,11 +42,83 @@ class PdfViewerScreen extends StatefulWidget {
 
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   late final PdfViewerController _pdfViewerCtrl;
+  bool _consentChecked = false;
+  bool _isSigning = false;
+  late final String _idempotencyKey;
 
   @override
   void initState() {
     super.initState();
     _pdfViewerCtrl = PdfViewerController();
+    _idempotencyKey = const Uuid().v4();
+  }
+
+  Future<void> _onSignPressed({
+    required BuildContext context,
+    required DocumentUseCases documentUseCases,
+  }) async {
+    if (_isSigning || !_consentChecked) return;
+    final userId = widget.userId?.trim();
+    final tenantId = widget.tenantId?.trim();
+    final accessToken = widget.accessToken?.trim();
+    if (tenantId == null ||
+        tenantId.isEmpty ||
+        userId == null ||
+        userId.isEmpty ||
+        accessToken == null ||
+        accessToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('User belum login.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSigning = true);
+    try {
+      final signed = await documentUseCases.requestDocumentSigning(
+        originalPdfPath: widget.pdfFile.path,
+        tenantId: tenantId,
+        accessToken: accessToken,
+        userId: userId,
+        consent: true,
+        idempotencyKey: _idempotencyKey,
+      );
+
+      if (!context.mounted) return;
+      setState(() => _isSigning = false);
+
+      if (signed == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gagal signing. Coba lagi.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => PdfViewerScreen(
+            pdfFile: File(signed.signedPdfPath),
+            mode: PdfViewerMode.signedResult,
+            verificationUrl: signed.verificationUrl,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      setState(() => _isSigning = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _saveAsPdfFile({
@@ -105,6 +177,36 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       PdfViewerMode.preview => 'Preview Dokumen',
       PdfViewerMode.signedResult => 'Hasil Tanda Tangan',
     };
+
+    final viewerParams = PdfViewerParams(
+      scaleEnabled: true,
+      loadingBannerBuilder: (context, bytesDownloaded, totalBytes) {
+        final progress =
+            (totalBytes != null && totalBytes > 0) ? bytesDownloaded / totalBytes : null;
+        return Center(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(230),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  value: progress,
+                  color: AppTheme.secoundColor,
+                ),
+                const SizedBox(height: 12),
+                const Text('Memuat dokumen...'),
+              ],
+            ),
+          ),
+        );
+      },
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -173,9 +275,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
               child: PdfViewer.file(
                 widget.pdfFile.path,
                 controller: _pdfViewerCtrl,
-                params: const PdfViewerParams(
-                  scaleEnabled: true,
-                ),
+                params: viewerParams,
               ),
             ),
             if (widget.mode == PdfViewerMode.preview) ...[
@@ -183,48 +283,69 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.secoundColor,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: Icon(MdiIcons.checkDecagramOutline),
-                      label: const Text('Lanjut ke Consent'),
-                      onPressed: () async {
-                        final userId = widget.userId?.trim();
-                        final tenantId = widget.tenantId?.trim();
-                        final accessToken = widget.accessToken?.trim();
-                        if (tenantId == null ||
-                            tenantId.isEmpty ||
-                            userId == null ||
-                            userId.isEmpty ||
-                            accessToken == null ||
-                            accessToken.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('User belum login.'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-
-                        if (!context.mounted) return;
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ConsentScreen(
-                              originalPdf: widget.pdfFile,
-                              tenantId: tenantId,
-                              userId: userId,
-                              accessToken: accessToken,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: _consentChecked,
+                            onChanged: _isSigning
+                                ? null
+                                : (value) => setState(
+                                      () => _consentChecked = value ?? false,
+                                    ),
+                          ),
+                          const Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(top: 12.0),
+                              child: Text(
+                                'Saya setuju dan ingin menandatangani dokumen ini.',
+                              ),
                             ),
                           ),
-                        );
-                      },
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.secoundColor,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor:
+                                AppTheme.secoundColor.withAlpha(140),
+                            disabledForegroundColor: Colors.white,
+                          ),
+                          onPressed: (_consentChecked && !_isSigning)
+                              ? () => _onSignPressed(
+                                    context: context,
+                                    documentUseCases: documentUseCases,
+                                  )
+                              : null,
+                          child: _isSigning
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.draw_rounded),
+                                    SizedBox(width: 8),
+                                    Text('TTD'),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

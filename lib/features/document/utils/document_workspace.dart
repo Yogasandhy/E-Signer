@@ -60,6 +60,26 @@ class DocumentWorkspace {
     return name ?? basename(anyPath);
   }
 
+  static String? readBackendVerificationUrlSync(String anyPath) {
+    final workspaceDir = findWorkspaceDir(anyPath);
+    if (workspaceDir == null) return null;
+
+    final file = metaFile(workspaceDir);
+    if (!file.existsSync()) return null;
+
+    try {
+      final contents = file.readAsStringSync();
+      final decoded = jsonDecode(contents);
+      if (decoded is! Map) return null;
+      final map = decoded.map((k, v) => MapEntry(k.toString(), v));
+      final url = map['backendVerificationUrl']?.toString().trim();
+      if (url == null || url.isEmpty) return null;
+      return url;
+    } catch (_) {
+      return null;
+    }
+  }
+
   static List<WorkspaceVersion> listVersionsSync(Directory workspaceDir) {
     final dir = versionsDir(workspaceDir);
     if (!dir.existsSync()) return const [];

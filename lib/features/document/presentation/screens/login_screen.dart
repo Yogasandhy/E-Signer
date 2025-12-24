@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/errors/api_exception.dart';
 import '../../domain/usecases/auth_usecases.dart';
 import '../../../../presentation/app_theme.dart';
 import 'verify_document_screen.dart';
@@ -39,6 +40,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static final RegExp _emailRegex =
+      RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+  static final RegExp _tenantSlugRegex = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$');
+
   final TextEditingController _tenantController = TextEditingController();
   final TextEditingController _tenantNameController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
@@ -50,11 +55,183 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isSubmitting = false;
   bool _passwordVisible = false;
   bool _passwordConfirmationVisible = false;
+  bool _loginAttempted = false;
+  bool _registerAttempted = false;
   String? _errorText;
 
   @override
   void initState() {
     super.initState();
+    _tenantController.addListener(_handleFormChanged);
+    _tenantNameController.addListener(_handleFormChanged);
+    _nameController.addListener(_handleFormChanged);
+    _emailController.addListener(_handleFormChanged);
+    _passwordController.addListener(_handleFormChanged);
+    _passwordConfirmationController.addListener(_handleFormChanged);
+  }
+
+  void _handleFormChanged() {
+    if (!mounted) return;
+    setState(() => _errorText = null);
+  }
+
+  bool _isValidEmail(String email) {
+    final value = email.trim();
+    return value.isNotEmpty && _emailRegex.hasMatch(value);
+  }
+
+  bool _isValidTenantSlug(String slug) {
+    final value = slug.trim();
+    return value.isNotEmpty && _tenantSlugRegex.hasMatch(value);
+  }
+
+  bool get _canSubmitLogin {
+    final tenant = _tenantController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (tenant.isEmpty || email.isEmpty || password.isEmpty) return false;
+    if (!_isValidTenantSlug(tenant)) return false;
+    if (!_isValidEmail(email)) return false;
+    if (password.length < 8) return false;
+    return true;
+  }
+
+  bool get _canSubmitRegister {
+    final tenantSlug = _tenantController.text.trim();
+    final tenantName = _tenantNameController.text.trim();
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final passwordConfirmation = _passwordConfirmationController.text;
+
+    if (tenantSlug.isNotEmpty && !_isValidTenantSlug(tenantSlug)) return false;
+    if (tenantName.isEmpty ||
+        name.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty ||
+        passwordConfirmation.isEmpty) {
+      return false;
+    }
+    if (!_isValidEmail(email)) return false;
+    if (password.length < 8) return false;
+    if (password != passwordConfirmation) return false;
+    return true;
+  }
+
+  String? get _loginTenantErrorText {
+    final tenant = _tenantController.text.trim();
+    if (tenant.isEmpty) {
+      return _loginAttempted ? 'Tenant wajib diisi.' : null;
+    }
+    if (!_tenantSlugRegex.hasMatch(tenant)) {
+      return 'Tenant tidak valid.';
+    }
+    return null;
+  }
+
+  String? get _loginEmailErrorText {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      return _loginAttempted ? 'Email wajib diisi.' : null;
+    }
+    if (!_isValidEmail(email)) {
+      return 'Email tidak valid.';
+    }
+    return null;
+  }
+
+  String? get _loginPasswordErrorText {
+    final password = _passwordController.text;
+    if (password.isEmpty) {
+      return _loginAttempted ? 'Password wajib diisi.' : null;
+    }
+    if (password.length < 8) {
+      return 'Password minimal 8 karakter.';
+    }
+    return null;
+  }
+
+  String? get _registerTenantSlugErrorText {
+    final slug = _tenantController.text.trim();
+    if (slug.isEmpty) return null;
+    if (!_tenantSlugRegex.hasMatch(slug)) {
+      return 'Slug hanya boleh huruf/angka, "-" atau "_".';
+    }
+    return null;
+  }
+
+  String? get _registerTenantNameErrorText {
+    final tenantName = _tenantNameController.text.trim();
+    if (tenantName.isEmpty) {
+      return _registerAttempted ? 'Nama perusahaan wajib diisi.' : null;
+    }
+    return null;
+  }
+
+  String? get _registerNameErrorText {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      return _registerAttempted ? 'Nama wajib diisi.' : null;
+    }
+    return null;
+  }
+
+  String? get _registerEmailErrorText {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      return _registerAttempted ? 'Email wajib diisi.' : null;
+    }
+    if (!_isValidEmail(email)) {
+      return 'Email tidak valid.';
+    }
+    return null;
+  }
+
+  String? get _registerPasswordErrorText {
+    final password = _passwordController.text;
+    if (password.isEmpty) {
+      return _registerAttempted ? 'Password wajib diisi.' : null;
+    }
+    if (password.length < 8) {
+      return 'Password minimal 8 karakter.';
+    }
+    return null;
+  }
+
+  String? get _registerPasswordConfirmationErrorText {
+    final password = _passwordController.text;
+    final passwordConfirmation = _passwordConfirmationController.text;
+
+    if (passwordConfirmation.isEmpty) {
+      return _registerAttempted ? 'Konfirmasi password wajib diisi.' : null;
+    }
+    if (passwordConfirmation != password) {
+      return 'Konfirmasi password tidak sama.';
+    }
+    return null;
+  }
+
+  String _formatAuthError(Object error, {required bool isLogin}) {
+    if (error is ApiException) {
+      final message = error.message.trim();
+      if (isLogin) {
+        if (error.statusCode == 401 ||
+            message.toLowerCase().contains('unauthorized')) {
+          return 'Email atau password salah.';
+        }
+        if (error.statusCode == 404) {
+          return 'Tenant tidak ditemukan.';
+        }
+      }
+      return message.isEmpty ? 'Terjadi kesalahan.' : message;
+    }
+
+    final message = error.toString().trim();
+    if (message.startsWith('Exception: ')) {
+      return message.substring('Exception: '.length);
+    }
+    return message.isEmpty ? 'Terjadi kesalahan.' : message;
   }
 
   void _setFormMode(_AuthFormMode mode) {
@@ -62,6 +239,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _formMode = mode;
       _errorText = null;
+      _loginAttempted = false;
+      _registerAttempted = false;
     });
     _passwordController.clear();
     _passwordConfirmationController.clear();
@@ -69,15 +248,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submitLogin() async {
     if (_isSubmitting) return;
+    setState(() {
+      _loginAttempted = true;
+      _errorText = null;
+    });
+    if (!_canSubmitLogin) {
+      return;
+    }
+
     final tenantId = _tenantController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-
-    setState(() => _errorText = null);
-    if (tenantId.isEmpty || email.isEmpty || password.isEmpty) {
-      setState(() => _errorText = 'Tenant, email, dan password wajib diisi.');
-      return;
-    }
 
     setState(() => _isSubmitting = true);
     try {
@@ -103,40 +284,27 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _isSubmitting = false;
-        _errorText = e.toString();
+        _errorText = _formatAuthError(e, isLogin: true);
       });
     }
   }
 
   Future<void> _submitRegister() async {
     if (_isSubmitting) return;
+    setState(() {
+      _registerAttempted = true;
+      _errorText = null;
+    });
+    if (!_canSubmitRegister) {
+      return;
+    }
+
     final tenantSlug = _tenantController.text.trim();
     final tenantName = _tenantNameController.text.trim();
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final passwordConfirmation = _passwordConfirmationController.text;
-
-    setState(() => _errorText = null);
-    if (tenantName.isEmpty ||
-        name.isEmpty ||
-        email.isEmpty ||
-        password.isEmpty ||
-        passwordConfirmation.isEmpty) {
-      setState(
-        () => _errorText =
-            'Nama perusahaan, nama, email, password, dan konfirmasi password wajib diisi.',
-      );
-      return;
-    }
-    if (password.length < 8) {
-      setState(() => _errorText = 'Password minimal 8 karakter.');
-      return;
-    }
-    if (password != passwordConfirmation) {
-      setState(() => _errorText = 'Konfirmasi password tidak sama.');
-      return;
-    }
 
     setState(() => _isSubmitting = true);
     try {
@@ -171,7 +339,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _isSubmitting = false;
-        _errorText = e.toString();
+        _errorText = _formatAuthError(e, isLogin: false);
       });
     }
   }
@@ -277,6 +445,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           passwordController:
                                               _passwordController,
                                           isSubmitting: _isSubmitting,
+                                          canSubmit: _canSubmitLogin,
                                           passwordVisible: _passwordVisible,
                                           onTogglePasswordVisible: () =>
                                               setState(
@@ -291,6 +460,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                           baseBorder: baseBorder,
                                           focusedBorder: focusedBorder,
                                           errorText: _errorText,
+                                          tenantErrorText: _loginTenantErrorText,
+                                          emailErrorText: _loginEmailErrorText,
+                                          passwordErrorText:
+                                              _loginPasswordErrorText,
                                         )
                                       : RegisterForm(
                                           tenantSlugController:
@@ -304,6 +477,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           passwordConfirmationController:
                                               _passwordConfirmationController,
                                           isSubmitting: _isSubmitting,
+                                          canSubmit: _canSubmitRegister,
                                           passwordVisible: _passwordVisible,
                                           passwordConfirmationVisible:
                                               _passwordConfirmationVisible,
@@ -325,6 +499,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                           baseBorder: baseBorder,
                                           focusedBorder: focusedBorder,
                                           errorText: _errorText,
+                                          tenantSlugErrorText:
+                                              _registerTenantSlugErrorText,
+                                          tenantNameErrorText:
+                                              _registerTenantNameErrorText,
+                                          nameErrorText: _registerNameErrorText,
+                                          emailErrorText: _registerEmailErrorText,
+                                          passwordErrorText:
+                                              _registerPasswordErrorText,
+                                          passwordConfirmationErrorText:
+                                              _registerPasswordConfirmationErrorText,
                                         ),
                                   VerifyDocumentScreen(
                                   ),

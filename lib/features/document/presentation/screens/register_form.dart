@@ -13,6 +13,7 @@ class RegisterForm extends StatelessWidget {
     required this.passwordController,
     required this.passwordConfirmationController,
     required this.isSubmitting,
+    required this.canSubmit,
     required this.passwordVisible,
     required this.passwordConfirmationVisible,
     required this.onTogglePasswordVisible,
@@ -22,6 +23,12 @@ class RegisterForm extends StatelessWidget {
     required this.baseBorder,
     required this.focusedBorder,
     this.errorText,
+    this.tenantSlugErrorText,
+    this.tenantNameErrorText,
+    this.nameErrorText,
+    this.emailErrorText,
+    this.passwordErrorText,
+    this.passwordConfirmationErrorText,
   });
 
   final TextEditingController tenantSlugController;
@@ -31,6 +38,7 @@ class RegisterForm extends StatelessWidget {
   final TextEditingController passwordController;
   final TextEditingController passwordConfirmationController;
   final bool isSubmitting;
+  final bool canSubmit;
   final bool passwordVisible;
   final bool passwordConfirmationVisible;
   final VoidCallback onTogglePasswordVisible;
@@ -38,6 +46,12 @@ class RegisterForm extends StatelessWidget {
   final VoidCallback onSubmit;
   final VoidCallback onSwitchToLogin;
   final String? errorText;
+  final String? tenantSlugErrorText;
+  final String? tenantNameErrorText;
+  final String? nameErrorText;
+  final String? emailErrorText;
+  final String? passwordErrorText;
+  final String? passwordConfirmationErrorText;
   final OutlineInputBorder baseBorder;
   final OutlineInputBorder focusedBorder;
 
@@ -64,6 +78,7 @@ class RegisterForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: tenantSlugErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -83,6 +98,7 @@ class RegisterForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: tenantNameErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -102,6 +118,7 @@ class RegisterForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: nameErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -122,6 +139,7 @@ class RegisterForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: emailErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -151,6 +169,7 @@ class RegisterForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: passwordErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -165,7 +184,7 @@ class RegisterForm extends StatelessWidget {
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(
             hintText: 'ulang password',
-            prefixIcon: const Icon(Icons.lock_outline_rounded),
+            prefixIcon: const Icon(Icons.lock_rounded),
             suffixIcon: IconButton(
               tooltip:
                   passwordConfirmationVisible ? 'Hide password' : 'Show password',
@@ -181,6 +200,7 @@ class RegisterForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: passwordConfirmationErrorText,
           ),
           onSubmitted: (_) => onSubmit(),
         ),
@@ -213,7 +233,7 @@ class RegisterForm extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: isSubmitting ? null : onSubmit,
+            onPressed: (isSubmitting || !canSubmit) ? null : onSubmit,
             child: isSubmitting
                 ? const SizedBox(
                     width: 22,

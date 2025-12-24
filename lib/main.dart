@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -31,7 +32,10 @@ Future<void> main() async {
     [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
   );
 
-  final apiClient = ApiClient(baseUrl: ApiConfig.baseUrl);
+  final apiClient = ApiClient(
+    baseUrl: ApiConfig.baseUrl,
+    enableLogs: kDebugMode,
+  );
 
   final sessionRepository = SessionRepositoryImpl(
     localDataSource: SessionLocalDataSource(),

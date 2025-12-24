@@ -15,6 +15,19 @@ Future<void> showDocumentVerifyResultDialog({
 }) async {
   final theme = Theme.of(context);
 
+  String buildInvalidSubtitle() {
+    final reason = (result.reason ?? '').trim();
+    if (reason.isEmpty) {
+      return 'Dokumen tidak valid atau sudah berubah.';
+    }
+
+    return switch (reason) {
+      'hash_not_found' => 'Dokumen tidak terdaftar di server.',
+      'hash_mismatch' => 'Dokumen berubah (hash mismatch).',
+      _ => 'Dokumen tidak valid ($reason).',
+    };
+  }
+
   final ui = result.valid
       ? _VerifyUi(
           title: 'VALID',
@@ -24,7 +37,7 @@ Future<void> showDocumentVerifyResultDialog({
         )
       : _VerifyUi(
           title: 'TIDAK VALID',
-          subtitle: 'Dokumen tidak valid atau sudah berubah.',
+          subtitle: buildInvalidSubtitle(),
           icon: MdiIcons.shieldAlertOutline,
           color: Colors.red,
         );
@@ -98,6 +111,40 @@ Future<void> showDocumentVerifyResultDialog({
           ],
           if (result.versionNumber != null) ...[
             _KeyValue(label: 'Versi', value: 'v${result.versionNumber}'),
+            const SizedBox(height: 10),
+          ],
+          if (result.signatureValid != null) ...[
+            _KeyValue(
+              label: 'Signature',
+              value: result.signatureValid == true ? 'VALID' : 'TIDAK VALID',
+            ),
+            const SizedBox(height: 10),
+          ],
+          if ((result.certificateStatus ?? '').trim().isNotEmpty) ...[
+            _KeyValue(
+              label: 'Sertifikat',
+              value: _formatCertificateStatus(result.certificateStatus!),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if ((result.tsaStatus ?? '').trim().isNotEmpty) ...[
+            _KeyValue(
+              label: 'TSA',
+              value: _formatTsaStatus(
+                rawStatus: result.tsaStatus!,
+                rawReason: result.tsaReason,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if ((result.ltvStatus ?? '').trim().isNotEmpty) ...[
+            _KeyValue(
+              label: 'LTV',
+              value: _formatLtvStatus(
+                rawStatus: result.ltvStatus!,
+                issueCount: result.ltvIssues.length,
+              ),
+            ),
             const SizedBox(height: 10),
           ],
           if (signers.isNotEmpty)
@@ -332,6 +379,57 @@ class _SignerHistoryBox extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatCertificateStatus(String raw) {
+  final v = raw.trim();
+  if (v.isEmpty) return v;
+  return switch (v) {
+    'valid' => 'Valid',
+    'expired' => 'Expired',
+    'revoked' => 'Revoked',
+    'untrusted' => 'Untrusted',
+    'not_yet_valid' => 'Not yet valid',
+    'missing' => 'Missing',
+    _ => v,
+  };
+}
+
+String _formatTsaStatus({
+  required String rawStatus,
+  String? rawReason,
+}) {
+  final status = rawStatus.trim();
+  if (status.isEmpty) return status;
+
+  final label = switch (status) {
+    'valid' => 'Valid',
+    'invalid' => 'Invalid',
+    'missing' => 'Missing',
+    _ => status,
+  };
+
+  final reason = (rawReason ?? '').trim();
+  if (reason.isEmpty || status == 'valid') return label;
+  return '$label ($reason)';
+}
+
+String _formatLtvStatus({
+  required String rawStatus,
+  required int issueCount,
+}) {
+  final status = rawStatus.trim();
+  if (status.isEmpty) return status;
+
+  final label = switch (status) {
+    'ready' => 'Ready',
+    'incomplete' => 'Incomplete',
+    'missing' => 'Missing',
+    _ => status,
+  };
+
+  if (issueCount <= 0 || status == 'ready') return label;
+  return '$label ($issueCount masalah)';
 }
 
 Future<Map<String, String>> _resolveTenantNames({

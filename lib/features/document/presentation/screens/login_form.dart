@@ -10,6 +10,7 @@ class LoginForm extends StatelessWidget {
     required this.emailController,
     required this.passwordController,
     required this.isSubmitting,
+    required this.canSubmit,
     required this.passwordVisible,
     required this.onTogglePasswordVisible,
     required this.onSubmit,
@@ -17,17 +18,24 @@ class LoginForm extends StatelessWidget {
     required this.baseBorder,
     required this.focusedBorder,
     this.errorText,
+    this.tenantErrorText,
+    this.emailErrorText,
+    this.passwordErrorText,
   });
 
   final TextEditingController tenantController;
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final bool isSubmitting;
+  final bool canSubmit;
   final bool passwordVisible;
   final VoidCallback onTogglePasswordVisible;
   final VoidCallback onSubmit;
   final VoidCallback onSwitchToRegister;
   final String? errorText;
+  final String? tenantErrorText;
+  final String? emailErrorText;
+  final String? passwordErrorText;
   final OutlineInputBorder baseBorder;
   final OutlineInputBorder focusedBorder;
 
@@ -54,6 +62,7 @@ class LoginForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: tenantErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -74,6 +83,7 @@ class LoginForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: emailErrorText,
           ),
           onSubmitted: (_) => FocusScope.of(context).nextFocus(),
         ),
@@ -87,7 +97,7 @@ class LoginForm extends StatelessWidget {
           obscureText: !passwordVisible,
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(
-            hintText: '••••••••',
+            hintText: 'minimal 8 karakter',
             prefixIcon: const Icon(Icons.lock_rounded),
             suffixIcon: IconButton(
               tooltip: passwordVisible ? 'Hide password' : 'Show password',
@@ -103,6 +113,7 @@ class LoginForm extends StatelessWidget {
             border: baseBorder,
             enabledBorder: baseBorder,
             focusedBorder: focusedBorder,
+            errorText: passwordErrorText,
           ),
           onSubmitted: (_) => onSubmit(),
         ),
@@ -135,7 +146,7 @@ class LoginForm extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: isSubmitting ? null : onSubmit,
+            onPressed: (isSubmitting || !canSubmit) ? null : onSubmit,
             child: isSubmitting
                 ? const SizedBox(
                     width: 22,
@@ -164,7 +175,8 @@ class LoginForm extends StatelessWidget {
               child: const Text(
                 'Register',
                 style: TextStyle(
-                  fontWeight: FontWeight.w800,color: Colors.blue
+                  fontWeight: FontWeight.w800,
+                  color: Colors.blue,
                 ),
               ),
             ),

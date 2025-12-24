@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,10 +9,12 @@ class ApiClient {
   ApiClient({
     required this.baseUrl,
     HttpClient? httpClient,
+    this.enableLogs = false,
   }) : _httpClient = httpClient ?? HttpClient();
 
   final String baseUrl;
   final HttpClient _httpClient;
+  final bool enableLogs;
 
   Uri apiUri({required String path}) {
     final p = path.startsWith('/') ? path.substring(1) : path;
@@ -65,17 +68,63 @@ class ApiClient {
     return h == 'localhost' || h == '127.0.0.1' || h == '0.0.0.0';
   }
 
+  void _log(String message) {
+    if (!enableLogs) return;
+    developer.log(message, name: 'ApiClient');
+  }
+
+  Object? _sanitizeJsonValue(Object? value, {String? key}) {
+    final normalizedKey = key?.trim().toLowerCase();
+    if (normalizedKey != null && normalizedKey.isNotEmpty) {
+      if (normalizedKey.contains('password') ||
+          normalizedKey.contains('token') ||
+          normalizedKey == 'authorization') {
+        return '<redacted>';
+      }
+    }
+
+    if (value is Map) {
+      return value.map(
+        (k, v) => MapEntry(
+          k.toString(),
+          _sanitizeJsonValue(v as Object?, key: k.toString()),
+        ),
+      );
+    }
+    if (value is List) {
+      return value.map((e) => _sanitizeJsonValue(e as Object?)).toList();
+    }
+
+    return value;
+  }
+
+  String _sanitizeBody(String body) {
+    final raw = body.trim();
+    if (raw.isEmpty) return body;
+
+    try {
+      final decoded = jsonDecode(body);
+      final sanitized = _sanitizeJsonValue(decoded as Object?);
+      return jsonEncode(sanitized);
+    } catch (_) {
+      return body;
+    }
+  }
+
   Future<String> getJson({
     required Uri uri,
     Map<String, String>? headers,
     String defaultErrorMessage = 'Request failed.',
   }) async {
+    _log('→ GET $uri');
     final request = await _httpClient.getUrl(uri);
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     _applyHeaders(request, headers);
 
     final response = await request.close();
     final body = await utf8.decodeStream(response);
+    _log('← [${response.statusCode}] GET $uri');
+    _log('Response body: ${_sanitizeBody(body)}');
     if (!_isSuccess(response.statusCode)) {
       throw ApiException(
         _extractErrorMessage(body) ?? defaultErrorMessage,
@@ -92,6 +141,8 @@ class ApiClient {
     Map<String, String>? headers,
     String defaultErrorMessage = 'Request failed.',
   }) async {
+    _log('→ POST $uri');
+    _log('Request body: ${jsonEncode(_sanitizeJsonValue(jsonBody))}');
     final request = await _httpClient.postUrl(uri);
     request.headers
       ..set(HttpHeaders.acceptHeader, 'application/json')
@@ -102,6 +153,8 @@ class ApiClient {
 
     final response = await request.close();
     final body = await utf8.decodeStream(response);
+    _log('← [${response.statusCode}] POST $uri');
+    _log('Response body: ${_sanitizeBody(body)}');
     if (!_isSuccess(response.statusCode)) {
       throw ApiException(
         _extractErrorMessage(body) ?? defaultErrorMessage,
@@ -122,6 +175,12 @@ class ApiClient {
     if (files.isEmpty) {
       throw const ApiException('Multipart request requires at least 1 file.');
     }
+
+    _log('→ MULTIPART POST $uri');
+    _log('Fields: ${jsonEncode(_sanitizeJsonValue(fields))}');
+    _log(
+      'Files: ${files.map((f) => f.fileName ?? f.file.uri.pathSegments.last).toList()}',
+    );
 
     final boundary = _newBoundary();
     final request = await _httpClient.postUrl(uri);
@@ -160,6 +219,8 @@ class ApiClient {
 
     final response = await request.close();
     final body = await utf8.decodeStream(response);
+    _log('← [${response.statusCode}] MULTIPART POST $uri');
+    _log('Response body: ${_sanitizeBody(body)}');
     if (!_isSuccess(response.statusCode)) {
       throw ApiException(
         _extractErrorMessage(body) ?? defaultErrorMessage,
@@ -175,6 +236,7 @@ class ApiClient {
     Map<String, String>? headers,
     String defaultErrorMessage = 'Request failed.',
   }) async {
+    _log('→ GET(BYTES) $uri');
     final request = await _httpClient.getUrl(uri);
     _applyHeaders(request, headers);
 
@@ -184,10 +246,14 @@ class ApiClient {
       await for (final chunk in response) {
         builder.add(chunk);
       }
-      return builder.takeBytes();
+      final bytes = builder.takeBytes();
+      _log('← [${response.statusCode}] GET(BYTES) $uri (${bytes.length} bytes)');
+      return bytes;
     }
 
     final body = await utf8.decodeStream(response);
+    _log('← [${response.statusCode}] GET(BYTES) $uri');
+    _log('Response body: ${_sanitizeBody(body)}');
     throw ApiException(
       _extractErrorMessage(body) ?? defaultErrorMessage,
       statusCode: response.statusCode,

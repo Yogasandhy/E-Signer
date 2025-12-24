@@ -6,6 +6,7 @@ import '../../domain/entities/document_pick_options.dart';
 import '../../domain/entities/document_signing_result.dart';
 import '../../domain/repositories/document_repository.dart';
 import '../../utils/document_workspace.dart';
+import '../../utils/pdf_validation.dart';
 import '../datasources/document_local_data_source.dart';
 import '../datasources/recent_file_local_data_source.dart';
 import '../../../../core/network/document_api.dart';
@@ -33,6 +34,11 @@ class DocumentRepositoryImpl implements DocumentRepository {
       allowMultiple: options.allowMultiple,
     );
     if (picked == null) return null;
+
+    await PdfValidation.validatePdfFile(
+      picked,
+      maxBytes: options.maxFileSizeBytes,
+    );
 
     final imported = await documentLocalDataSource.importPdfToAppStorage(
       sourcePdf: picked,
